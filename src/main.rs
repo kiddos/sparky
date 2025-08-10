@@ -18,6 +18,9 @@ use winit::window::{Window, WindowBuilder, WindowLevel};
 #[cfg(target_os = "linux")]
 use winit::platform::x11::WindowBuilderExtX11;
 
+#[cfg(target_os = "windows")]
+use winit::platform::windows::WindowBuilderExtWindows;
+
 // --- Sprites ---
 const BLINK1: &[u8] = include_bytes!("../assets/blink1.png");
 const BLINK2: &[u8] = include_bytes!("../assets/blink2.png");
