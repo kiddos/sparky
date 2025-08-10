@@ -38,9 +38,9 @@ jobs:
         run: |
           mkdir artifacts
           if [ "${{ runner.os }}" == "Windows" ]; then
-            mv target/${{ matrix.target }}/release/basecode-lsp.exe artifacts/${{ matrix.artifact }}
+            mv target/${{ matrix.target }}/release/sparky.exe artifacts/${{ matrix.artifact }}
           else
-            mv target/${{ matrix.target }}/release/basecode-lsp artifacts/${{ matrix.artifact }}
+            mv target/${{ matrix.target }}/release/sparky artifacts/${{ matrix.artifact }}
           fi
         shell: bash
 
