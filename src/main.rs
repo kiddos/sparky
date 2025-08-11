@@ -1,3 +1,5 @@
+#![windows_subsystem = "windows"]
+
 use std::ffi::{CString, c_void};
 use std::num::NonZeroU32;
 use std::sync::Arc;
@@ -195,13 +197,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let menu = Menu::new();
     menu.append(&show_menu_item)?;
     menu.append(&quit_menu_item)?;
-    let _ = TrayIconBuilder::new()
+    let tray_icon = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_tooltip("Sparky")
         .with_title("Sparky")
         .with_icon(load_icon())
         .build()
         .unwrap();
+    tray_icon.set_visible(true)?;
 
     #[cfg(not(target_os = "macos"))]
     {
