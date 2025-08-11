@@ -31,6 +31,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
+      - name: Install Linux Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libxdo-dev libappindicator3-dev #or libayatana-appindicator3-dev
+
       - name: Build Release Binary
         run: cargo build --release --target ${{ matrix.target }}
 
