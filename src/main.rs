@@ -5,16 +5,15 @@ use std::num::NonZeroU32;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use rand::Rng;
 use glutin::config::{Config, ConfigTemplateBuilder};
 use glutin::context::{ContextApi, ContextAttributesBuilder};
 use glutin::display::{Display, GetGlDisplay};
 use glutin::prelude::*;
 use glutin::surface::{Surface, SurfaceAttributesBuilder, WindowSurface};
+use rand::Rng;
 use raw_window_handle::HasRawWindowHandle;
-use tray_icon::menu::{Menu, MenuItem};
-use tray_icon::TrayIconBuilder;
-use tray_icon::menu::MenuEvent;
+use tray_icon::menu::{Menu, MenuEvent, MenuId, MenuItem};
+use tray_icon::{TrayIcon, TrayIconBuilder};
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, Event, MouseButton, WindowEvent};
 use winit::event_loop::{ControlFlow, EventLoopBuilder};
@@ -50,6 +49,9 @@ const FRAME_WIDTH: u32 = 128;
 const FRAME_HEIGHT: u32 = 128;
 const NUM_FRAMES: u32 = 65;
 const ANIMATION_SPEED: Duration = Duration::from_millis(66);
+
+const SHOW_MENU_ID: &str = "SHOW_MENU";
+const QUIT_MENU_ID: &str = "QUIT_MENU";
 
 // --- OpenGL Shader Source Code ---
 
@@ -150,6 +152,22 @@ fn load_icon() -> tray_icon::Icon {
     tray_icon::Icon::from_rgba(image_data, img_width, img_height).expect("Failed to open icon")
 }
 
+fn create_tray_icon() -> TrayIcon {
+    let show_menu_item = MenuItem::with_id(MenuId::new(SHOW_MENU_ID), "Show", true, None);
+    let quit_menu_item = MenuItem::with_id(MenuId::new(QUIT_MENU_ID), "Quit", true, None);
+    let menu = Menu::new();
+    let _ = menu.append(&show_menu_item);
+    let _ = menu.append(&quit_menu_item);
+    let tray_icon = TrayIconBuilder::new()
+        .with_menu(Box::new(menu))
+        .with_tooltip("Sparky")
+        .with_icon(load_icon())
+        .build()
+        .unwrap();
+    let _ = tray_icon.set_visible(true);
+    tray_icon
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Window and Event Loop Setup ---
     let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build()?;
@@ -192,19 +210,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let window: Arc<Window> = Arc::new(window);
     let raw_window_handle = window.raw_window_handle();
 
-    let show_menu_item = MenuItem::new("Show", true, None);
-    let quit_menu_item = MenuItem::new("Quit", true, None);
-    let menu = Menu::new();
-    menu.append(&show_menu_item)?;
-    menu.append(&quit_menu_item)?;
-    let tray_icon = TrayIconBuilder::new()
-        .with_menu(Box::new(menu))
-        .with_tooltip("Sparky")
-        .with_title("Sparky")
-        .with_icon(load_icon())
-        .build()
-        .unwrap();
-    tray_icon.set_visible(true)?;
+    #[cfg(target_os = "linux")]
+    std::thread::spawn(move || {
+        gtk::init().unwrap();
+        let _tray_icon = create_tray_icon();
+        gtk::main();
+    });
 
     #[cfg(not(target_os = "macos"))]
     {
@@ -372,22 +383,18 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         blink1_texture,
         blink2_texture,
         blink3_texture,
-
         hello1_texture,
         highfive1_texture,
         highfive2_texture,
         idle1_texture,
         idle2_texture,
-
         laugh1_texture,
         laugh2_texture,
         smile1_texture,
         smile2_texture,
         smile3_texture,
-
         talk1_texture,
         talk2_texture,
-
         tired1_texture,
         tired2_texture,
         tired3_texture,
@@ -395,23 +402,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut active_texture_index = 0;
     let mut rebind_texture = true;
 
-
     // --- Animation State ---
     let mut current_frame: u32 = 0;
     let mut last_update = Instant::now();
     let mut rng = rand::rng();
 
+    #[cfg(not(target_os = "linux"))]
+    let mut _tray_icon = None;
     // --- Event Loop ---
     event_loop.run(move |event, elwt| {
         match event {
+            #[cfg(not(target_os = "linux"))]
+            Event::NewEvents(event) => {
+                _tray_icon = create_tray_icon(items);
+            }
             Event::UserEvent(event) => match event {
                 UserEvent::MenuEvent(event) => {
-                    if event.id() == show_menu_item.id() {
+                    if event.id() == SHOW_MENU_ID {
                         window.set_visible(true);
-                    } else if event.id() == quit_menu_item.id() {
+                    } else if event.id() == QUIT_MENU_ID {
                         elwt.exit();
                     }
-                },
+                }
             },
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => elwt.exit(),
