@@ -353,6 +353,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     unsafe {
+        gl::Viewport(0, 0, FRAME_WIDTH as i32, FRAME_HEIGHT as i32);
         gl::ClearColor(0.0, 0.0, 0.0, 0.0);
         gl::Clear(gl::COLOR_BUFFER_BIT);
     }
@@ -431,6 +432,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         NonZeroU32::new(physical_size.width).unwrap(),
                         NonZeroU32::new(physical_size.height).unwrap(),
                     );
+                    let size = physical_size.width.min(physical_size.height);
+                    unsafe {
+                        gl::Viewport(0, 0, size as i32, size as i32);
+                    }
                 }
                 WindowEvent::RedrawRequested => {
                     unsafe {
