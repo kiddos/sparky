@@ -4,15 +4,18 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use rand::Rng;
-use glutin::config::ConfigTemplateBuilder;
+use glutin::config::{Config, ConfigTemplateBuilder};
 use glutin::context::{ContextApi, ContextAttributesBuilder};
 use glutin::display::{Display, GetGlDisplay};
 use glutin::prelude::*;
 use glutin::surface::{Surface, SurfaceAttributesBuilder, WindowSurface};
 use raw_window_handle::HasRawWindowHandle;
+use tray_icon::menu::{Menu, MenuItem};
+use tray_icon::TrayIconBuilder;
+use tray_icon::menu::MenuEvent;
 use winit::dpi::{PhysicalPosition, PhysicalSize};
 use winit::event::{ElementState, Event, MouseButton, WindowEvent};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event_loop::{ControlFlow, EventLoopBuilder};
 use winit::window::{Window, WindowBuilder, WindowLevel};
 
 #[cfg(target_os = "linux")]
@@ -40,6 +43,7 @@ const TALK2: &[u8] = include_bytes!("../assets/talk2.png");
 const TIRED1: &[u8] = include_bytes!("../assets/tired1.png");
 const TIRED2: &[u8] = include_bytes!("../assets/tired2.png");
 const TIRED3: &[u8] = include_bytes!("../assets/tired3.png");
+const ICON: &[u8] = include_bytes!("../images/sparky.png");
 const FRAME_WIDTH: u32 = 128;
 const FRAME_HEIGHT: u32 = 128;
 const NUM_FRAMES: u32 = 65;
@@ -116,9 +120,37 @@ fn load_texture_from_bytes(bytes: &[u8]) -> Result<u32, image::ImageError> {
     Ok(texture_id)
 }
 
+pub fn gl_config_picker(configs: Box<dyn Iterator<Item = Config> + '_>) -> Config {
+    configs
+        .reduce(|accum, config| {
+            let transparency_check = config.supports_transparency().unwrap_or(false)
+                & !accum.supports_transparency().unwrap_or(false);
+
+            if transparency_check || config.num_samples() > accum.num_samples() {
+                config
+            } else {
+                accum
+            }
+        })
+        .unwrap()
+}
+
+#[derive(Debug)]
+enum UserEvent {
+    MenuEvent(tray_icon::menu::MenuEvent),
+}
+
+fn load_icon() -> tray_icon::Icon {
+    let image = image::load_from_memory(ICON).expect("").to_rgba8();
+    let image = image::imageops::resize(&image, 256, 256, image::imageops::FilterType::Gaussian);
+    let (img_width, img_height) = image.dimensions();
+    let image_data = image.into_raw();
+    tray_icon::Icon::from_rgba(image_data, img_width, img_height).expect("Failed to open icon")
+}
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Window and Event Loop Setup ---
-    let event_loop = EventLoop::new()?;
+    let event_loop = EventLoopBuilder::<UserEvent>::with_user_event().build()?;
     let mut window_builder = WindowBuilder::new()
         .with_inner_size(PhysicalSize::new(FRAME_WIDTH, FRAME_HEIGHT))
         .with_decorations(false)
@@ -139,14 +171,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (window, gl_config) = glutin_winit::DisplayBuilder::new()
         .with_window_builder(Some(window_builder))
-        .build(&event_loop, template, |configs| {
-            // Find a config that supports transparency.
-            // We'll just pick the first one that works.
-            configs
-                .filter(|c| c.supports_transparency().unwrap_or(false))
-                .next()
-                .unwrap()
-        })?;
+        .build(&event_loop, template, gl_config_picker)?;
 
     let window = window.unwrap();
 
@@ -160,10 +185,28 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let y = monitor_size.height.saturating_sub(window_size.height);
 
     // Move window
-    window.set_outer_position(PhysicalPosition::new(x as i32, y as i32));
+    window.set_outer_position(PhysicalPosition::new(x as i32, y as i32 - 30));
 
     let window: Arc<Window> = Arc::new(window);
     let raw_window_handle = window.raw_window_handle();
+
+    let show_menu_item = MenuItem::new("Show", true, None);
+    let quit_menu_item = MenuItem::new("Quit", true, None);
+    let menu = Menu::new();
+    menu.append(&show_menu_item)?;
+    menu.append(&quit_menu_item)?;
+    let _ = TrayIconBuilder::new()
+        .with_menu(Box::new(menu))
+        .with_tooltip("Sparky")
+        .with_title("Sparky")
+        .with_icon(load_icon())
+        .build()
+        .unwrap();
+
+    let proxy = event_loop.create_proxy();
+    MenuEvent::set_event_handler(Some(move |event| {
+        let _ = proxy.send_event(UserEvent::MenuEvent(event));
+    }));
 
     // 3. Get the GL display and create a GL context.
     let gl_display: Display = gl_config.display();
@@ -286,6 +329,19 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         gl::EnableVertexAttribArray(1);
     }
 
+    // Enable blending for transparency
+    unsafe {
+        gl::Enable(gl::BLEND);
+        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
+    }
+
+    unsafe {
+        gl::ClearColor(0.0, 0.0, 0.0, 0.0);
+        gl::Clear(gl::COLOR_BUFFER_BIT);
+    }
+
+    gl_surface.swap_buffers(&gl_context).unwrap();
+
     // --- Texture Loading ---
     let blink1_texture = load_texture_from_bytes(BLINK1)?;
     let blink2_texture = load_texture_from_bytes(BLINK2)?;
@@ -333,11 +389,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut active_texture_index = 0;
     let mut rebind_texture = true;
 
-    // Enable blending for transparency
-    unsafe {
-        gl::Enable(gl::BLEND);
-        gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
-    }
 
     // --- Animation State ---
     let mut current_frame: u32 = 0;
@@ -347,6 +398,15 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // --- Event Loop ---
     event_loop.run(move |event, elwt| {
         match event {
+            Event::UserEvent(event) => match event {
+                UserEvent::MenuEvent(event) => {
+                    if event.id() == show_menu_item.id() {
+                        window.set_visible(true);
+                    } else if event.id() == quit_menu_item.id() {
+                        elwt.exit();
+                    }
+                },
+            },
             Event::WindowEvent { event, .. } => match event {
                 WindowEvent::CloseRequested => elwt.exit(),
                 WindowEvent::Resized(physical_size) => {

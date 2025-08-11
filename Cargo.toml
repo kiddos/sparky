@@ -15,3 +15,4 @@ glutin-winit = "0.4.2"
 # Required for glutin
 raw-window-handle = "0.5"
 rand = "0.9.2"
+tray-icon = "0.21.1"
