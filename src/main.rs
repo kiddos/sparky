@@ -203,10 +203,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .build()
         .unwrap();
 
-    let proxy = event_loop.create_proxy();
-    MenuEvent::set_event_handler(Some(move |event| {
-        let _ = proxy.send_event(UserEvent::MenuEvent(event));
-    }));
+    #[cfg(not(target_os = "macos"))]
+    {
+        let proxy = event_loop.create_proxy();
+        MenuEvent::set_event_handler(Some(move |event| {
+            let _ = proxy.send_event(UserEvent::MenuEvent(event));
+        }));
+    }
 
     // 3. Get the GL display and create a GL context.
     let gl_display: Display = gl_config.display();
