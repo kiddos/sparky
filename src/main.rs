@@ -407,6 +407,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut current_frame: u32 = 0;
     let mut last_update = Instant::now();
     let mut rng = rand::rng();
+
+    #[cfg(not(target_os = "linux"))]
     let mut tray_icon: Option<TrayIcon> = None;
 
     // --- Event Loop ---
