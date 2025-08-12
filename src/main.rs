@@ -407,13 +407,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut current_frame: u32 = 0;
     let mut last_update = Instant::now();
     let mut rng = rand::rng();
+    let mut tray_icon: Option<TrayIcon> = None;
 
     // --- Event Loop ---
     event_loop.run(move |event, elwt| {
         match event {
             #[cfg(not(target_os = "linux"))]
-            Event::NewEvents(event) => {
-                let _tray_icon = create_tray_icon();
+            Event::NewEvents(_event) => {
+                if tray_icon.is_none() {
+                    tray_icon = Some(create_tray_icon());
+                }
             }
             Event::UserEvent(event) => match event {
                 UserEvent::MenuEvent(event) => {
