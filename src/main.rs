@@ -41,7 +41,7 @@ use winit::window::{Window, WindowAttributes, WindowLevel};
 use winit::platform::x11::WindowAttributesExtX11;
 
 #[cfg(target_os = "windows")]
-use winit::platform::windows::WindowBuilderExtWindows;
+use winit::platform::windows::WindowAttributesExtWindows;
 
 // --- Sprites ---
 const BLINK1: &[u8] = include_bytes!("../assets/blink1.png");
