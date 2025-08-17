@@ -1,8 +1,10 @@
 #![windows_subsystem = "windows"]
 
+use std::env;
 use std::error::Error;
 use std::ffi::CString;
 use std::ffi::c_void;
+use std::fs::File;
 use std::num::NonZeroU32;
 use std::time::Duration;
 use std::time::Instant;
@@ -17,9 +19,12 @@ use glutin::display::GetGlDisplay;
 use glutin::prelude::*;
 use glutin::surface::{Surface, SurfaceAttributesBuilder, WindowSurface};
 use glutin_winit::DisplayBuilder;
+use log::{LevelFilter, info};
 use rand::Rng;
 use rand::rngs::ThreadRng;
 use raw_window_handle::HasWindowHandle;
+use simplelog::CombinedLogger;
+use simplelog::WriteLogger;
 use tray_icon::TrayIcon;
 use tray_icon::TrayIconBuilder;
 use tray_icon::menu::Menu;
@@ -121,6 +126,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let mut app = App::new();
     app.init(&event_loop);
     app.create_tray_icon(&event_loop);
+    info!("startin event loop...");
     event_loop.run_app(&mut app)?;
 
     Ok(())
@@ -181,6 +187,10 @@ impl App {
     }
 
     pub fn init(&mut self, event_loop: &EventLoop<UserEvent>) {
+        self.init_log();
+
+        info!("init...");
+
         let template = ConfigTemplateBuilder::new().with_alpha_size(8);
 
         let display_builder =
@@ -196,6 +206,25 @@ impl App {
             self.init_opengl_buffers();
             let _ = self.load_textures();
         }
+    }
+
+    fn init_log(&self) {
+        let temp_dir = env::temp_dir();
+        let log_file_path = temp_dir.join("sparky.log");
+        let log_file = match File::create(&log_file_path) {
+            Ok(file) => file,
+            Err(e) => {
+                eprintln!("Failed to create log file at {:?}: {}", log_file_path, e);
+                return; 
+            }
+        };
+        let _ = CombinedLogger::init(vec![
+            WriteLogger::new(
+                LevelFilter::Info,
+                simplelog::Config::default(),
+                log_file,
+            ),
+        ]);
     }
 
     fn init_window_position(&self) {
@@ -250,6 +279,8 @@ impl App {
     }
 
     fn create_surface(&self, gl_config: &Config) -> Surface<WindowSurface> {
+        info!("ceate surface...");
+
         let window = self.window.as_ref().unwrap();
         let raw_window_handle = window.window_handle().ok().map(|wh| wh.as_raw()).unwrap();
         let gl_display = gl_config.display();
@@ -267,6 +298,8 @@ impl App {
     }
 
     fn init_opengl_buffers(&mut self) {
+        info!("init opengl buffers...");
+
         let gl_context = self.gl_context.as_ref().unwrap();
         let gl_surface = self.gl_surface.as_ref().unwrap();
         gl_context.make_current(gl_surface).unwrap();
@@ -493,6 +526,7 @@ impl ApplicationHandler<UserEvent> for App {
     ) {
         match event {
             WindowEvent::CloseRequested => {
+                info!("sparky exit");
                 event_loop.exit();
             }
             WindowEvent::Resized(physical_size) => {
@@ -658,6 +692,7 @@ fn load_texture_from_bytes(bytes: &[u8]) -> Result<u32, image::ImageError> {
 }
 
 fn create_tray_icon() -> TrayIcon {
+    info!("create tray icon...");
     let show_menu_item = MenuItem::with_id(MenuId::new(SHOW_MENU_ID), "Show", true, None);
     let quit_menu_item = MenuItem::with_id(MenuId::new(QUIT_MENU_ID), "Quit", true, None);
     let menu = Menu::new();
@@ -674,6 +709,7 @@ fn create_tray_icon() -> TrayIcon {
 }
 
 fn load_icon() -> tray_icon::Icon {
+    info!("load icon...");
     let image = image::load_from_memory(ICON).expect("").to_rgba8();
     let image = image::imageops::resize(&image, 256, 256, image::imageops::FilterType::Gaussian);
     let (img_width, img_height) = image.dimensions();
