@@ -52,7 +52,9 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe | Select-Object -First 1 -ExpandProperty FullName
+          $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse -Filter signtool.exe |
+                Where-Object { $_.FullName -match "\\x64\\" } |
+                Select-Object -First 1 -ExpandProperty FullName
           echo "SIGNSDK=$signtool" >> $env:GITHUB_ENV
 
       - name: Sign Windows Binary
