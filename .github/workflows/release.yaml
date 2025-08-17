@@ -40,6 +40,29 @@ jobs:
       - name: Build Release Binary
         run: cargo build --release --target ${{ matrix.target }}
 
+      # Windows code signing step
+      - name: Decode Signing Certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pfxPath = "$env:USERPROFILE\\signing_cert.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String("${{ secrets.WINDOWS_CERT_BASE64 }}"))
+
+      - name: Sign Windows Binary
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $pfxPath = "$env:USERPROFILE\\signing_cert.pfx"
+          $password = "${{ secrets.WINDOWS_CERT_PASSWORD }}"
+          $exePath = "target/${{ matrix.target }}/release/sparky.exe"
+          & "C:\\Program Files (x86)\\Windows Kits\\10\\bin\\x64\\signtool.exe" sign `
+            /f $pfxPath `
+            /p $password `
+            /tr http://timestamp.digicert.com `
+            /td sha256 `
+            /fd sha256 `
+            $exePath
+
       - name: Rename Binary
         run: |
           mkdir artifacts
