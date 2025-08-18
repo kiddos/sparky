@@ -9,7 +9,6 @@ use std::num::NonZeroU32;
 use std::time::Duration;
 use std::time::Instant;
 
-use glutin::config::Config;
 use glutin::config::ConfigTemplateBuilder;
 use glutin::config::GetGlConfig;
 use glutin::context::{
@@ -47,6 +46,9 @@ use winit::platform::x11::WindowAttributesExtX11;
 
 #[cfg(target_os = "windows")]
 use winit::platform::windows::WindowAttributesExtWindows;
+
+type GLConfig = glutin::config::Config;
+type LogConfig = simplelog::Config;
 
 // --- Sprites ---
 const BLINK1: &[u8] = include_bytes!("../assets/blink1.png");
@@ -124,7 +126,6 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     let event_loop = EventLoop::<UserEvent>::with_user_event().build()?;
 
     let mut app = App::new();
-    app.init(&event_loop);
     app.create_tray_icon(&event_loop);
     info!("startin event loop...");
     event_loop.run_app(&mut app)?;
@@ -132,7 +133,7 @@ pub fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-pub fn gl_config_picker(configs: Box<dyn Iterator<Item = Config> + '_>) -> Config {
+pub fn gl_config_picker(configs: Box<dyn Iterator<Item = GLConfig> + '_>) -> GLConfig {
     configs
         .reduce(|accum, config| {
             let transparency_check = config.supports_transparency().unwrap_or(false)
@@ -186,7 +187,7 @@ impl App {
         }
     }
 
-    pub fn init(&mut self, event_loop: &EventLoop<UserEvent>) {
+    pub fn init(&mut self, event_loop: &ActiveEventLoop) {
         self.init_log();
 
         info!("init...");
@@ -215,16 +216,14 @@ impl App {
             Ok(file) => file,
             Err(e) => {
                 eprintln!("Failed to create log file at {:?}: {}", log_file_path, e);
-                return; 
+                return;
             }
         };
-        let _ = CombinedLogger::init(vec![
-            WriteLogger::new(
-                LevelFilter::Info,
-                simplelog::Config::default(),
-                log_file,
-            ),
-        ]);
+        let _ = CombinedLogger::init(vec![WriteLogger::new(
+            LevelFilter::Info,
+            LogConfig::default(),
+            log_file,
+        )]);
     }
 
     fn init_window_position(&self) {
@@ -242,7 +241,7 @@ impl App {
         window.set_outer_position(PhysicalPosition::new(x as i32, y as i32 - 30));
     }
 
-    fn create_context(&self, gl_config: &Config) -> NotCurrentContext {
+    fn create_context(&self, gl_config: &GLConfig) -> NotCurrentContext {
         let gl_display = gl_config.display();
         let raw_window_handle = self
             .window
@@ -278,7 +277,7 @@ impl App {
         }
     }
 
-    fn create_surface(&self, gl_config: &Config) -> Surface<WindowSurface> {
+    fn create_surface(&self, gl_config: &GLConfig) -> Surface<WindowSurface> {
         info!("ceate surface...");
 
         let window = self.window.as_ref().unwrap();
@@ -514,8 +513,7 @@ impl App {
 
 impl ApplicationHandler<UserEvent> for App {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let gl_config = self.gl_context.as_ref().unwrap().config();
-        let _ = glutin_winit::finalize_window(event_loop, window_attributes(), &gl_config);
+        self.init(event_loop);
     }
 
     fn window_event(
