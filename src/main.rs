@@ -54,26 +54,41 @@ type LogConfig = simplelog::Config;
 const BLINK1: &[u8] = include_bytes!("../assets/blink1.png");
 const BLINK2: &[u8] = include_bytes!("../assets/blink2.png");
 const BLINK3: &[u8] = include_bytes!("../assets/blink3.png");
+const CLEANING1: &[u8] = include_bytes!("../assets/cleaning1.png");
+const CLEANING2: &[u8] = include_bytes!("../assets/cleaning2.png");
+const HAPPY1: &[u8] = include_bytes!("../assets/happy1.png");
 const HELLO1: &[u8] = include_bytes!("../assets/hello1.png");
+const HELLO2: &[u8] = include_bytes!("../assets/hello2.png");
+const HELLO3: &[u8] = include_bytes!("../assets/hello3.png");
+const HELLO4: &[u8] = include_bytes!("../assets/hello4.png");
+const HELLO5: &[u8] = include_bytes!("../assets/hello5.png");
 const HIGH_FIVE1: &[u8] = include_bytes!("../assets/highfive1.png");
 const HIGH_FIVE2: &[u8] = include_bytes!("../assets/highfive2.png");
+const HIGH_FIVE3: &[u8] = include_bytes!("../assets/highfive3.png");
+const HUNGRY1: &[u8] = include_bytes!("../assets/hungry1.png");
 const IDLE1: &[u8] = include_bytes!("../assets/idle1.png");
 const IDLE2: &[u8] = include_bytes!("../assets/idle2.png");
+const IDLE3: &[u8] = include_bytes!("../assets/idle3.png");
+const IDLE4: &[u8] = include_bytes!("../assets/idle4.png");
+const IDLE5: &[u8] = include_bytes!("../assets/idle5.png");
+const IDLE6: &[u8] = include_bytes!("../assets/idle6.png");
 const LAUGH1: &[u8] = include_bytes!("../assets/laugh1.png");
 const LAUGH2: &[u8] = include_bytes!("../assets/laugh2.png");
 const SMILE1: &[u8] = include_bytes!("../assets/smile1.png");
 const SMILE2: &[u8] = include_bytes!("../assets/smile2.png");
-const SMILE3: &[u8] = include_bytes!("../assets/smile3.png");
 const TALK1: &[u8] = include_bytes!("../assets/talk1.png");
 const TALK2: &[u8] = include_bytes!("../assets/talk2.png");
+const TALK3: &[u8] = include_bytes!("../assets/talk3.png");
+const TALK4: &[u8] = include_bytes!("../assets/talk4.png");
+const TALK5: &[u8] = include_bytes!("../assets/talk5.png");
 const TIRED1: &[u8] = include_bytes!("../assets/tired1.png");
 const TIRED2: &[u8] = include_bytes!("../assets/tired2.png");
 const TIRED3: &[u8] = include_bytes!("../assets/tired3.png");
+const TIRED4: &[u8] = include_bytes!("../assets/tired4.png");
 const ICON: &[u8] = include_bytes!("../images/sparky.png");
 
 const FRAME_WIDTH: u32 = 128;
 const FRAME_HEIGHT: u32 = 128;
-const NUM_FRAMES: u32 = 65;
 const ANIMATION_SPEED: Duration = Duration::from_millis(66);
 
 // menu
@@ -103,10 +118,11 @@ const FS_SRC: &str = r#"
 
     uniform sampler2D ourTexture;
     uniform float frame_offset; // Horizontal offset for the current animation frame
+    uniform float num_frames;
 
     void main() {
         // Apply the horizontal offset to the texture coordinate
-        vec2 newTexCoord = vec2(TexCoord.x + frame_offset, TexCoord.y);
+        vec2 newTexCoord = vec2((TexCoord.x + frame_offset) / num_frames, TexCoord.y);
         vec4 texColor = texture(ourTexture, newTexCoord);
         
         // Discard pixels that are mostly transparent to maintain the shape
@@ -157,7 +173,7 @@ struct App {
     vbo: u32,
     ebo: u32,
     current_frame: u32,
-    textures: Vec<u32>,
+    textures: Vec<Texture>,
     active_texture_index: usize,
     bind_texture: bool,
     last_update: Instant,
@@ -329,22 +345,10 @@ impl App {
 
         let vertices: [f32; 16] = [
             // positions   // texture coords
-            1.0,
-            1.0,
-            1.0 / NUM_FRAMES as f32,
-            0.0, // top right
-            1.0,
-            -1.0,
-            1.0 / NUM_FRAMES as f32,
-            1.0, // bottom right
-            -1.0,
-            -1.0,
-            0.0,
-            1.0, // bottom left
-            -1.0,
-            1.0,
-            0.0,
-            0.0, // top left
+            1.0, 1.0, 1.0, 0.0, // top right
+            1.0, -1.0, 1.0, 1.0, // bottom right
+            -1.0, -1.0, 0.0, 1.0, // bottom left
+            -1.0, 1.0, 0.0, 0.0, // top left
         ];
         let indices: [u32; 6] = [
             0, 1, 3, // first triangle
@@ -421,41 +425,73 @@ impl App {
         let blink1_texture = load_texture_from_bytes(BLINK1)?;
         let blink2_texture = load_texture_from_bytes(BLINK2)?;
         let blink3_texture = load_texture_from_bytes(BLINK3)?;
+        let cleaning1_texture = load_texture_from_bytes(CLEANING1)?;
+        let cleaning2_texture = load_texture_from_bytes(CLEANING2)?;
+        let happy1_texture = load_texture_from_bytes(HAPPY1)?;
         let hello1_texture = load_texture_from_bytes(HELLO1)?;
+        let hello2_texture = load_texture_from_bytes(HELLO2)?;
+        let hello3_texture = load_texture_from_bytes(HELLO3)?;
+        let hello4_texture = load_texture_from_bytes(HELLO4)?;
+        let hello5_texture = load_texture_from_bytes(HELLO5)?;
         let highfive1_texture = load_texture_from_bytes(HIGH_FIVE1)?;
         let highfive2_texture = load_texture_from_bytes(HIGH_FIVE2)?;
+        let highfive3_texture = load_texture_from_bytes(HIGH_FIVE3)?;
+        let hungry1_texture = load_texture_from_bytes(HUNGRY1)?;
         let idle1_texture = load_texture_from_bytes(IDLE1)?;
         let idle2_texture = load_texture_from_bytes(IDLE2)?;
+        let idle3_texture = load_texture_from_bytes(IDLE3)?;
+        let idle4_texture = load_texture_from_bytes(IDLE4)?;
+        let idle5_texture = load_texture_from_bytes(IDLE5)?;
+        let idle6_texture = load_texture_from_bytes(IDLE6)?;
         let laugh1_texture = load_texture_from_bytes(LAUGH1)?;
         let laugh2_texture = load_texture_from_bytes(LAUGH2)?;
         let smile1_texture = load_texture_from_bytes(SMILE1)?;
         let smile2_texture = load_texture_from_bytes(SMILE2)?;
-        let smile3_texture = load_texture_from_bytes(SMILE3)?;
         let talk1_texture = load_texture_from_bytes(TALK1)?;
         let talk2_texture = load_texture_from_bytes(TALK2)?;
+        let talk3_texture = load_texture_from_bytes(TALK3)?;
+        let talk4_texture = load_texture_from_bytes(TALK4)?;
+        let talk5_texture = load_texture_from_bytes(TALK5)?;
         let tired1_texture = load_texture_from_bytes(TIRED1)?;
         let tired2_texture = load_texture_from_bytes(TIRED2)?;
         let tired3_texture = load_texture_from_bytes(TIRED3)?;
+        let tired4_texture = load_texture_from_bytes(TIRED4)?;
 
         let textures = [
             blink1_texture,
             blink2_texture,
             blink3_texture,
+            cleaning1_texture,
+            cleaning2_texture,
+            happy1_texture,
             hello1_texture,
+            hello2_texture,
+            hello3_texture,
+            hello4_texture,
+            hello5_texture,
             highfive1_texture,
             highfive2_texture,
+            highfive3_texture,
+            hungry1_texture,
             idle1_texture,
             idle2_texture,
+            idle3_texture,
+            idle4_texture,
+            idle5_texture,
+            idle6_texture,
             laugh1_texture,
             laugh2_texture,
             smile1_texture,
             smile2_texture,
-            smile3_texture,
             talk1_texture,
             talk2_texture,
+            talk3_texture,
+            talk4_texture,
+            talk5_texture,
             tired1_texture,
             tired2_texture,
             tired3_texture,
+            tired4_texture,
         ];
 
         self.textures = textures.to_vec();
@@ -473,18 +509,24 @@ impl App {
 
             gl::UseProgram(self.shader_program);
 
+            let current_texture = &self.textures[self.active_texture_index];
             if self.bind_texture {
-                gl::BindTexture(gl::TEXTURE_2D, self.textures[self.active_texture_index]);
+                gl::BindTexture(gl::TEXTURE_2D, current_texture.texture_id);
+
+                let num_frames_loc = gl::GetUniformLocation(
+                    self.shader_program,
+                    CString::new("num_frames").unwrap().as_ptr(),
+                );
+                gl::Uniform1f(num_frames_loc, current_texture.num_frames as f32);
+
                 self.bind_texture = false;
             }
 
-            // Set the uniform for the current animation frame
-            let offset = (self.current_frame as f32) / (NUM_FRAMES as f32);
-            let uniform_location = gl::GetUniformLocation(
+            let frame_offset_loc = gl::GetUniformLocation(
                 self.shader_program,
                 CString::new("frame_offset").unwrap().as_ptr(),
             );
-            gl::Uniform1f(uniform_location, offset);
+            gl::Uniform1f(frame_offset_loc, self.current_frame as f32);
 
             gl::BindVertexArray(self.vao);
             gl::DrawElements(gl::TRIANGLES, 6, gl::UNSIGNED_INT, std::ptr::null());
@@ -558,7 +600,8 @@ impl ApplicationHandler<UserEvent> for App {
     fn about_to_wait(&mut self, event_loop: &ActiveEventLoop) {
         let _ = event_loop;
         if self.last_update.elapsed() >= ANIMATION_SPEED {
-            self.current_frame = (self.current_frame + 1) % NUM_FRAMES;
+            let current_texture = &self.textures[self.active_texture_index];
+            self.current_frame = (self.current_frame + 1) % current_texture.num_frames;
             self.last_update = Instant::now();
             if self.current_frame == 0 {
                 self.active_texture_index = self.rng.random_range(0..self.textures.len());
@@ -658,7 +701,13 @@ unsafe fn create_shader(shader_type: gl::types::GLenum, source: &str) -> gl::typ
     shader
 }
 
-fn load_texture_from_bytes(bytes: &[u8]) -> Result<u32, image::ImageError> {
+#[derive(Clone)]
+struct Texture {
+    texture_id: u32,
+    num_frames: u32,
+}
+
+fn load_texture_from_bytes(bytes: &[u8]) -> Result<Texture, image::ImageError> {
     let image = image::load_from_memory(bytes)?.to_rgba8();
     let (img_width, img_height) = image.dimensions();
     let image_data = image.into_raw();
@@ -686,7 +735,11 @@ fn load_texture_from_bytes(bytes: &[u8]) -> Result<u32, image::ImageError> {
         );
         gl::GenerateMipmap(gl::TEXTURE_2D);
     }
-    Ok(texture_id)
+    let num_frames = img_width / FRAME_WIDTH;
+    Ok(Texture {
+        texture_id,
+        num_frames,
+    })
 }
 
 fn create_tray_icon() -> TrayIcon {
