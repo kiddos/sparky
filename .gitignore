@@ -1,0 +1,8 @@
+/target
+cert/*
+
+.venv/
+__pycache__/
+assets/
+raw/
+sprites
