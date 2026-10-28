@@ -6,3 +6,6 @@ __pycache__/
 assets/
 raw/
 sprites
+.env
+.env.*
+!.env.example

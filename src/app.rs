@@ -6,9 +6,12 @@ use glfw::Context;
 use log::info;
 use rand::rngs::ThreadRng;
 
+use crate::brain::{BrainEvent, BrainHandle};
+use crate::chat::ChatWindow;
 use crate::shader::{FS_SRC, VS_SRC, create_shader};
-use crate::sprite::{SpriteAnimation, find_sprites_dir, load_texture_from_file};
-use crate::util::weighted_random_index;
+use crate::util::{
+    calculate_drag_offset, calculate_drag_target, get_global_cursor_pos, weighted_random_index,
+};
 use crate::video::{VideoAnimation, VideoStream, find_videos_dir, load_video_animations};
 
 pub enum PlaybackMode {
@@ -18,10 +21,7 @@ pub enum PlaybackMode {
         active_stream: Option<VideoStream>,
         frame_buf: Vec<u8>,
         texture_id: u32,
-    },
-    Sprite {
-        animations: Vec<SpriteAnimation>,
-    },
+    }
 }
 
 pub struct App {
@@ -39,14 +39,21 @@ pub struct App {
     pub mode: PlaybackMode,
     pub select_prob: Vec<f32>,
     pub active_animation_index: usize,
-    pub current_frame: usize,
     pub rng: ThreadRng,
     pub is_dragging: bool,
     pub drag_start_pos: (f64, f64),
+    pub drag_offset: (i32, i32),
+    pub window_pos: (i32, i32),
+    pub brain: Option<BrainHandle>,
+    pub chat_window: Option<ChatWindow>,
+    pub queued_animation: Option<usize>,
+    pub current_dialogue: Option<String>,
+    pub current_emotion: Option<String>,
 }
 
 impl App {
     pub fn new(window: glfw::PWindow, width: u32, height: u32, black_threshold: f32) -> Self {
+        let window_pos = window.get_pos();
         Self {
             window,
             shader_program: 0,
@@ -60,10 +67,16 @@ impl App {
             mode: PlaybackMode::None,
             select_prob: Vec::new(),
             active_animation_index: 0,
-            current_frame: 0,
             rng: rand::rng(),
             is_dragging: false,
             drag_start_pos: (0.0, 0.0),
+            drag_offset: (0, 0),
+            window_pos,
+            brain: None,
+            chat_window: None,
+            queued_animation: None,
+            current_dialogue: None,
+            current_emotion: None,
         }
     }
 
@@ -203,8 +216,6 @@ impl App {
             }
         }
 
-        // 2. Fallback to legacy sprite directories
-        self.load_legacy_sprites()?;
         Ok(())
     }
 
@@ -244,106 +255,6 @@ impl App {
             }
             *active_stream = Some(stream);
         }
-        Ok(())
-    }
-
-    pub fn load_legacy_sprites(&mut self) -> Result<(), Box<dyn Error>> {
-        let sprites_dir = find_sprites_dir();
-        info!("Loading legacy sprites from: {:?}", sprites_dir);
-
-        let mut animations = Vec::new();
-
-        if sprites_dir.is_dir() {
-            let mut entries: Vec<_> = std::fs::read_dir(&sprites_dir)
-                .map_err(|e| {
-                    format!(
-                        "Failed to read sprites directory at {:?}: {}",
-                        sprites_dir, e
-                    )
-                })?
-                .filter_map(|e| e.ok())
-                .collect();
-            entries.sort_by_key(|e| e.path());
-
-            for entry in entries {
-                let path = entry.path();
-                if path.is_dir() {
-                    let dir_name = match path.file_name().and_then(|n| n.to_str()) {
-                        Some(name) if !name.starts_with('.') => name.to_string(),
-                        _ => continue,
-                    };
-
-                    let mut frame_files: Vec<_> = std::fs::read_dir(&path)?
-                        .filter_map(|e| e.ok())
-                        .filter(|e| {
-                            e.path()
-                                .extension()
-                                .and_then(|ext| ext.to_str())
-                                .map(|ext| ext.eq_ignore_ascii_case("png"))
-                                .unwrap_or(false)
-                        })
-                        .collect();
-
-                    frame_files.sort_by_key(|e| e.file_name());
-
-                    if frame_files.is_empty() {
-                        continue;
-                    }
-
-                    let mut frames = Vec::with_capacity(frame_files.len());
-                    for file in frame_files {
-                        let texture_id = load_texture_from_file(&file.path())?;
-                        frames.push(texture_id);
-                    }
-
-                    info!(
-                        "Loaded animation '{}' with {} frames",
-                        dir_name,
-                        frames.len()
-                    );
-                    animations.push(SpriteAnimation {
-                        name: dir_name,
-                        frames,
-                    });
-                }
-            }
-
-            if animations.is_empty() {
-                let mut frame_files: Vec<_> = std::fs::read_dir(&sprites_dir)?
-                    .filter_map(|e| e.ok())
-                    .filter(|e| {
-                        e.path()
-                            .extension()
-                            .and_then(|ext| ext.to_str())
-                            .map(|ext| ext.eq_ignore_ascii_case("png"))
-                            .unwrap_or(false)
-                    })
-                    .collect();
-                frame_files.sort_by_key(|e| e.file_name());
-
-                if !frame_files.is_empty() {
-                    let mut frames = Vec::with_capacity(frame_files.len());
-                    for file in frame_files {
-                        let texture_id = load_texture_from_file(&file.path())?;
-                        frames.push(texture_id);
-                    }
-                    info!("Loaded default animation with {} frames", frames.len());
-                    animations.push(SpriteAnimation {
-                        name: "default".to_string(),
-                        frames,
-                    });
-                }
-            }
-        }
-
-        if animations.is_empty() {
-            return Err("No videos or sprite frames found to play.".into());
-        }
-
-        self.select_prob = vec![1.0; animations.len()];
-        self.active_animation_index = 0;
-        self.current_frame = 0;
-        self.mode = PlaybackMode::Sprite { animations };
         Ok(())
     }
 
@@ -390,8 +301,18 @@ impl App {
 
                 if finished {
                     *active_stream = None;
-                    self.active_animation_index =
-                        weighted_random_index(&self.select_prob, &mut self.rng);
+                    let prev_anim_name = animations.get(self.active_animation_index).map(|a| a.name.clone());
+                    if let Some(name) = prev_anim_name {
+                        if let Some(ref brain) = self.brain {
+                            brain.send_event(BrainEvent::AnimationCompleted { name });
+                        }
+                    }
+
+                    self.active_animation_index = if let Some(queued) = self.queued_animation.take() {
+                        queued
+                    } else {
+                        weighted_random_index(&self.select_prob, &mut self.rng)
+                    };
                     let next_anim = &animations[self.active_animation_index];
                     info!("Switching to video animation: '{}'", next_anim.name);
 
@@ -426,19 +347,156 @@ impl App {
                     }
                 }
             }
-            PlaybackMode::Sprite { animations } => {
-                if animations.is_empty() {
-                    return;
-                }
-                let current_anim = &animations[self.active_animation_index];
-                self.current_frame = (self.current_frame + 1) % current_anim.frames.len();
-                if self.current_frame == 0 {
-                    self.active_animation_index =
-                        weighted_random_index(&self.select_prob, &mut self.rng);
-                }
-            }
             PlaybackMode::None => {}
         }
+    }
+
+    pub fn set_brain(&mut self, brain: BrainHandle) {
+        self.brain = Some(brain);
+    }
+
+    pub fn set_chat_window(&mut self, chat_window: ChatWindow) {
+        self.chat_window = Some(chat_window);
+    }
+
+    pub fn set_window_pos(&mut self, x: i32, y: i32) {
+        self.window.set_pos(x, y);
+        self.window_pos = (x, y);
+    }
+
+    pub fn start_dragging(&mut self, click_x: f64, click_y: f64) {
+        self.is_dragging = true;
+        self.drag_start_pos = (click_x, click_y);
+        let (wx, wy) = self.window.get_pos();
+        self.window_pos = (wx, wy);
+
+        if let Some((gx, gy)) = get_global_cursor_pos() {
+            self.drag_offset = calculate_drag_offset((gx, gy), self.window_pos);
+        } else {
+            self.drag_offset = (click_x.round() as i32, click_y.round() as i32);
+        }
+    }
+
+    pub fn stop_dragging(&mut self) {
+        self.is_dragging = false;
+    }
+
+    pub fn update_drag(&mut self, screen_h: i32) -> Option<(f64, f64)> {
+        if !self.is_dragging {
+            return None;
+        }
+
+        let (target_x, target_y) = if let Some((gx, gy)) = get_global_cursor_pos() {
+            calculate_drag_target((gx, gy), self.drag_offset)
+        } else {
+            let (cx, cy) = self.window.get_cursor_pos();
+            let dx = cx - self.drag_start_pos.0;
+            let dy = cy - self.drag_start_pos.1;
+            (
+                self.window_pos.0 + dx.round() as i32,
+                self.window_pos.1 + dy.round() as i32,
+            )
+        };
+
+        if (target_x, target_y) != self.window_pos {
+            let dx = (target_x - self.window_pos.0) as f64;
+            let dy = (target_y - self.window_pos.1) as f64;
+            self.set_window_pos(target_x, target_y);
+            self.update_chat_position(screen_h);
+            Some((dx, dy))
+        } else {
+            None
+        }
+    }
+
+    pub fn toggle_chat(&mut self, screen_h: i32) {
+        let (wx, wy) = self.window_pos;
+        if let Some(ref mut chat) = self.chat_window {
+            chat.toggle_visibility(wx, wy, self.width, self.height, screen_h);
+        }
+    }
+
+    pub fn set_chat_visible(&mut self, show: bool, screen_h: i32) {
+        let (wx, wy) = self.window_pos;
+        if let Some(ref mut chat) = self.chat_window {
+            chat.set_visible(show, wx, wy, self.width, self.height, screen_h);
+        }
+    }
+
+    pub fn update_chat_position(&self, screen_h: i32) {
+        let (wx, wy) = self.window_pos;
+        if let Some(ref chat) = self.chat_window {
+            if chat.is_visible() {
+                chat.update_position(wx, wy, self.width, self.height, screen_h);
+            }
+        }
+    }
+
+    pub fn animation_names(&self) -> Vec<String> {
+        match &self.mode {
+            PlaybackMode::Video { animations, .. } => {
+                animations.iter().map(|a| a.name.clone()).collect()
+            }
+            PlaybackMode::None => Vec::new(),
+        }
+    }
+
+    pub fn find_animation_index(&self, name: &str) -> Option<usize> {
+        match &self.mode {
+            PlaybackMode::Video { animations, .. } => {
+                animations.iter().position(|a| a.name.eq_ignore_ascii_case(name))
+            }
+            PlaybackMode::None => None,
+        }
+    }
+
+    pub fn update_select_prob_for(&mut self, target_idx: usize) {
+        if target_idx < self.select_prob.len() {
+            for (i, p) in self.select_prob.iter_mut().enumerate() {
+                if i == target_idx {
+                    *p = 6.0;
+                } else {
+                    *p = 1.0;
+                }
+            }
+        }
+    }
+
+    pub fn poll_brain(&mut self) -> Option<(String, String)> {
+        let mut decisions = Vec::new();
+        if let Some(ref brain) = self.brain {
+            while let Some(decision) = brain.try_recv_decision() {
+                decisions.push(decision);
+            }
+        }
+
+        let mut latest = None;
+        let names = self.animation_names();
+        for decision in decisions {
+            let resolved = decision.resolve_animation_name(&names);
+            info!(
+                "[Sparky Brain] Gemma 4 transition: emotion='{}' (video: {:?}) | \"{}\"",
+                decision.target_emotion, resolved, decision.dialogue
+            );
+
+            self.current_dialogue = Some(decision.dialogue.clone());
+            self.current_emotion = Some(decision.target_emotion.clone());
+
+            if let Some(ref anim_name) = resolved {
+                if let Some(idx) = self.find_animation_index(anim_name) {
+                    self.queued_animation = Some(idx);
+                    self.update_select_prob_for(idx);
+                }
+            }
+
+            if let Some(ref chat) = self.chat_window {
+                chat.set_status(&format!("[{}]", decision.target_emotion));
+                chat.add_sparky_message(&decision.target_emotion, &decision.dialogue);
+            }
+
+            latest = Some((decision.target_emotion, decision.dialogue));
+        }
+        latest
     }
 
     pub fn render(&mut self) {
@@ -456,13 +514,6 @@ impl App {
             match &self.mode {
                 PlaybackMode::Video { texture_id, .. } => {
                     gl::BindTexture(gl::TEXTURE_2D, *texture_id);
-                }
-                PlaybackMode::Sprite { animations } => {
-                    if !animations.is_empty() {
-                        let current_anim = &animations[self.active_animation_index];
-                        let texture_id = current_anim.frames[self.current_frame];
-                        gl::BindTexture(gl::TEXTURE_2D, texture_id);
-                    }
                 }
                 PlaybackMode::None => {}
             }
@@ -492,7 +543,7 @@ impl App {
                 }
                 true
             }
-            PlaybackMode::Sprite { .. } | PlaybackMode::None => true,
+            PlaybackMode::None => true,
         }
     }
 }

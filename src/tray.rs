@@ -3,6 +3,7 @@ use tray_icon::menu::{Menu, MenuId, MenuItem};
 use tray_icon::{TrayIcon, TrayIconBuilder};
 
 pub const SHOW_MENU_ID: &str = "SHOW_MENU";
+pub const TOGGLE_CHAT_MENU_ID: &str = "TOGGLE_CHAT_MENU";
 pub const QUIT_MENU_ID: &str = "QUIT_MENU";
 
 const ICON: &[u8] = include_bytes!("../sparky.png");
@@ -10,9 +11,11 @@ const ICON: &[u8] = include_bytes!("../sparky.png");
 pub fn create_tray_icon() -> Option<TrayIcon> {
     info!("create tray icon...");
     let show_menu_item = MenuItem::with_id(MenuId::new(SHOW_MENU_ID), "Show", true, None);
+    let chat_menu_item = MenuItem::with_id(MenuId::new(TOGGLE_CHAT_MENU_ID), "Toggle Chat", true, None);
     let quit_menu_item = MenuItem::with_id(MenuId::new(QUIT_MENU_ID), "Quit", true, None);
     let menu = Menu::new();
     let _ = menu.append(&show_menu_item);
+    let _ = menu.append(&chat_menu_item);
     let _ = menu.append(&quit_menu_item);
 
     match TrayIconBuilder::new()
