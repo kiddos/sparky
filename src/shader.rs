@@ -1,58 +1,64 @@
 use std::ffi::CString;
 
 pub const VS_SRC: &str = r#"
-    #version 330 core
-    layout (location = 0) in vec2 aPos;
-    layout (location = 1) in vec2 aTexCoord;
+#version 330 core
+layout (location = 0) in vec2 aPos;
+layout (location = 1) in vec2 aTexCoord;
 
-    out vec2 TexCoord;
+out vec2 TexCoord;
 
-    void main() {
-        gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
-        TexCoord = aTexCoord;
-    }
+void main() {
+    gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
+    TexCoord = aTexCoord;
+}
 "#;
 
 pub const FS_SRC: &str = r#"
-    #version 330 core
-    out vec4 FragColor;
+#version 330 core
+out vec4 FragColor;
 
-    in vec2 TexCoord;
+in vec2 TexCoord;
 
-    uniform sampler2D ourTexture;
-    uniform float uBlackThreshold;
+uniform sampler2D ourTexture;
+uniform vec3 uKeyColor = vec3(0.0, 1.0, 0.0); // Pure green (#00FF00)
+uniform float uSimilarity = 0.35;             // How much green to cut (0.30 - 0.45)
+uniform float uSmoothness = 0.20;             // Edge softness (0.10 - 0.25)
+uniform float uSpill      = 0.20;             // Green spill removal strength
 
-    void main() {
-        vec4 texColor = texture(ourTexture, TexCoord);
+// Convert RGB to Chrominance (Cb, Cr) so brightness/shadows don't affect the key
+vec2 RGBtoUV(vec3 rgb) {
+    return vec2(
+        rgb.r * -0.169 + rgb.g * -0.331 + rgb.b *  0.500 + 0.5,
+        rgb.r *  0.500 + rgb.g * -0.419 + rgb.b * -0.081 + 0.5
+    );
+}
 
-        // Discard transparent pixels. For video playback the alpha channel holds
-        // a background mask computed on the CPU (flood fill of dark pixels that
-        // are connected to the frame border), so dark parts *inside* Sparky
-        // (pupils, outlines, shadows) keep alpha = 1 and are not keyed out.
-        if (texColor.a < 0.1)
-            discard;
+void main() {
+    vec4 rgba = texture(ourTexture, TexCoord);
 
-        if (uBlackThreshold > 0.0) {
-            // Only soften pixels that sit right next to the background, to hide
-            // harsh compression borders without eating into dark interior detail.
-            vec2 texel = 1.0 / vec2(textureSize(ourTexture, 0));
-            float minNeighborA = min(
-                min(texture(ourTexture, TexCoord + vec2(texel.x, 0.0)).a,
-                    texture(ourTexture, TexCoord - vec2(texel.x, 0.0)).a),
-                min(texture(ourTexture, TexCoord + vec2(0.0, texel.y)).a,
-                    texture(ourTexture, TexCoord - vec2(0.0, texel.y)).a));
+    // 1. Measure color distance in UV chrominance space
+    float chromaDist = distance(RGBtoUV(rgba.rgb), RGBtoUV(uKeyColor));
 
-            float alphaFactor = 1.0;
-            if (minNeighborA < 0.5) {
-                float maxVal = max(texColor.r, max(texColor.g, texColor.b));
-                float smoothRange = 0.08;
-                alphaFactor = clamp((maxVal - uBlackThreshold) / smoothRange, 0.0, 1.0);
-            }
-            FragColor = vec4(texColor.rgb, texColor.a * alphaFactor);
-        } else {
-            FragColor = texColor;
-        }
-    }
+    // 2. Compute smooth alpha mask with smoothstep for softer, anti-aliased edges
+    float alpha = smoothstep(uSimilarity, uSimilarity + max(uSmoothness, 0.0001), chromaDist);
+
+    if (alpha <= 0.001)
+        discard;
+
+    // 3. Green Spill Suppression on edge pixels
+    float spillFactor = smoothstep(uSimilarity, uSimilarity + max(uSpill, 0.0001), chromaDist);
+    
+    // Suppress excess green by clamping G to the max of R and B on keyed edges
+    vec3 despilledRGB = rgba.rgb;
+    float maxRB = max(rgba.r, rgba.b);
+    despilledRGB.g = mix(min(rgba.g, maxRB), rgba.g, spillFactor);
+
+    // Optional: Unpremultiply out the subtracted green brightness on semi-transparent edges
+    float greenRemoved = rgba.g - despilledRGB.g;
+    despilledRGB.rb += greenRemoved * 0.35;
+
+    FragColor = vec4(clamp(despilledRGB, 0.0, 1.0), alpha);
+}
 "#;
 
 pub unsafe fn create_shader(shader_type: gl::types::GLenum, source: &str) -> gl::types::GLuint {
