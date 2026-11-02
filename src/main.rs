@@ -19,8 +19,8 @@ use state::{EmotionRegistry, StateMachine};
 use tray::TrayService;
 use ui::ChatState;
 
-const BASE_WIDTH: u32 = 384;
-const BASE_HEIGHT: u32 = 216;
+const BASE_WIDTH: u32 = 288;
+const BASE_HEIGHT: u32 = 162;
 const CHAT_EXTRA_HEIGHT: u32 = 304;
 const EXPANDED_HEIGHT: u32 = BASE_HEIGHT + CHAT_EXTRA_HEIGHT;
 
@@ -292,7 +292,7 @@ fn main() -> Result<()> {
                     gl::BlendFunc(gl::SRC_ALPHA, gl::ONE_MINUS_SRC_ALPHA);
                 }
 
-                // If chat is open, kitten quad occupies the bottom 216 px
+                // If chat is open, kitten quad occupies the bottom 162 px
                 let (fb_w, fb_h) = pet_window.window.get_framebuffer_size();
                 let kitten_fb_h =
                     ((BASE_HEIGHT as f32 / pet_window.height as f32) * fb_h as f32) as i32;

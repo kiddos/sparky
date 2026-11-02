@@ -46,7 +46,8 @@ impl ChatState {
             .unwrap_or_else(|| "🐱 Sparky".to_string());
 
         egui::Window::new("🐾 Sparky Chat")
-            .default_size(Vec2::new(360.0, 260.0))
+            .default_size(Vec2::new(272.0, 260.0))
+            .anchor(egui::Align2::LEFT_TOP, egui::vec2(8.0, 8.0))
             .resizable(false)
             .collapsible(false)
             .show(ctx, |ui| {
@@ -109,11 +110,15 @@ impl ChatState {
 
                     // Text Input Box
                     ui.horizontal(|ui| {
+                        let send_button_width = 46.0;
+                        let item_spacing = ui.spacing().item_spacing.x;
+                        let text_width =
+                            (ui.available_width() - send_button_width - item_spacing).max(60.0);
                         let response = ui.add_enabled(
                             !self.is_generating,
                             TextEdit::singleline(&mut self.current_input)
                                 .hint_text("Talk to Sparky...")
-                                .desired_width(260.0),
+                                .desired_width(text_width),
                         );
 
                         let enter_pressed = response.lost_focus()

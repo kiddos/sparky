@@ -152,8 +152,8 @@ sparky/
 #### 1. [`src/main.rs`](file:///home/kiddos/projects/tools/sparky/src/main.rs)
 - **Application Orchestrator:** Initializes GLFW window, OpenGL context, emotion registry, WebP clips, system tray, brain worker, and egui overlay.
 - **Dynamic Window & Viewport Management:**
-  - Base pet window size: `BASE_WIDTH = 384`, `BASE_HEIGHT = 216`.
-  - When the chat overlay is opened, the window expands vertically to `EXPANDED_HEIGHT = 520` (`BASE_HEIGHT + CHAT_EXTRA_HEIGHT`).
+  - Base pet window size: `BASE_WIDTH = 288`, `BASE_HEIGHT = 162`.
+  - When the chat overlay is opened, the window expands vertically to `EXPANDED_HEIGHT = 466` (`BASE_HEIGHT + CHAT_EXTRA_HEIGHT`).
   - Viewport splitting: When chat is visible, kitten quad rendering is clamped to `gl::Viewport(0, 0, fb_w, kitten_fb_h)`, while egui renders to the full `gl::Viewport(0, 0, fb_w, fb_h)`.
 - **Event Dispatching:** Pumps GLFW events into egui, checks pointer capture status (`egui_ctx.wants_pointer_input()`), forwards window dragging when egui does not capture the mouse, handles tray commands, and dispatches brain tokens.
 - **Benchmarking & Profiling:** When run with `--profile-run`, samples CPU and RSS via `sysinfo` every 1 second, printing a benchmark summary after 10 seconds.
