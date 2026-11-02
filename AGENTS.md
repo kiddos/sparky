@@ -142,6 +142,12 @@ sparky/
     │   ├── mod.rs                  # Module exports for system tray
     │   └── service.rs              # TrayService: tray-icon + muda menu, dynamic mood submenu, procedural 32x32 icon
     │
+    ├── rpc/
+    │   ├── mod.rs                  # Module exports, re-exports, test suite
+    │   ├── handler.rs              # RPC method dispatch, parameter extraction, OpenRPC discovery
+    │   ├── protocol.rs             # JSON-RPC 2.0 specifications (Request, Response, Error, ID, Batch)
+    │   └── server.rs               # Dual HTTP/raw TCP server, GLFW wake notifier, connection worker pool
+    │
     └── ui/
         ├── mod.rs                  # Module exports for immediate-mode UI
         └── chat_window.rs          # ChatState: egui dialogue overlay, message history, emotion chips, input handling
@@ -194,7 +200,12 @@ sparky/
 #### 7. [`src/ui/`](file:///home/kiddos/projects/tools/sparky/src/ui/mod.rs)
 - [`chat_window.rs`](file:///home/kiddos/projects/tools/sparky/src/ui/chat_window.rs): Immediate-mode chat panel with conversation history, current mood badge (`[😺 Happy]`, `[😏 Smirk]`), thinking indicator, and dynamic suggestion chips derived directly from `EmotionRegistry`.
 
-#### 8. [`shaders/`](file:///home/kiddos/projects/tools/sparky/shaders/)
+#### 8. [`src/rpc/`](file:///home/kiddos/projects/tools/sparky/src/rpc/mod.rs)
+- **JSON-RPC 2.0 Dual Transport Server:** Exposes a high-performance, non-blocking JSON-RPC 2.0 interface supporting both HTTP POST (with CORS headers for web/tool integration) and raw line-delimited TCP (for scripts, `nc`, and IPC) on the same port (default `127.0.0.1:6006`).
+- **GLFW Event Loop Waking:** Uses [`GlfwWakeNotifier`](file:///home/kiddos/projects/tools/sparky/src/rpc/server.rs) (`glfw.post_empty_event()`) to wake up the main thread instantly upon receiving remote commands, guaranteeing $\le 0.3\%$ idle CPU without polling.
+- **Remote Operations:** Supports controlling emotions (`sparky.set_emotion`), pet status inspection (`sparky.get_state`), interactions (`sparky.pet`, `sparky.poke`), AI chat generation (`sparky.send_chat`, `sparky.get_chat_history`), window geometry & click-through (`sparky.set_position`, `sparky.set_visible`, `sparky.set_click_through`), and introspection (`rpc.discover`, `sparky.list_emotions`).
+
+#### 9. [`shaders/`](file:///home/kiddos/projects/tools/sparky/shaders/)
 - [`quad.vert`](file:///home/kiddos/projects/tools/sparky/shaders/quad.vert): Positions quad vertices and flips texture Y coordinate: `TexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y)`.
 - [`chroma.frag`](file:///home/kiddos/projects/tools/sparky/shaders/chroma.frag):
   - Converts RGB to normalized CbCr chrominance:

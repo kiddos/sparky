@@ -1,9 +1,9 @@
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
-use serde::Deserialize;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
 pub enum LoopMode {
     Loop,
     OnceThenReturn,
@@ -28,9 +28,9 @@ fn default_duration() -> f32 {
     8.0
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct EmotionDefinition {
-    #[serde(skip)]
+    #[serde(default, skip_deserializing)]
     pub id: String,
     pub name: String,
     #[serde(default = "default_emoji")]
@@ -67,7 +67,10 @@ impl EmotionRegistry {
     ) -> anyhow::Result<Self> {
         let config_path_ref = config_path.as_ref();
         let assets_dir_ref = assets_dir.as_ref();
-        log::info!("Loading emotions configuration from '{}'...", config_path_ref.display());
+        log::info!(
+            "Loading emotions configuration from '{}'...",
+            config_path_ref.display()
+        );
         let content = fs::read_to_string(config_path_ref)?;
         let parsed: EmotionConfigFile = toml::from_str(&content)?;
 
@@ -120,13 +123,15 @@ impl EmotionRegistry {
     }
 
     pub fn all_emotions(&self) -> impl Iterator<Item = &EmotionDefinition> {
-        self.order
-            .iter()
-            .filter_map(|id| self.emotions.get(id))
+        self.order.iter().filter_map(|id| self.emotions.get(id))
     }
 
     pub fn active_emotions(&self) -> impl Iterator<Item = &EmotionDefinition> {
         self.all_emotions()
+    }
+
+    pub fn available_emotion_ids(&self) -> Vec<String> {
+        self.order.clone()
     }
 
     /// Resolves the effective animation asset name and shader tint, applying fallback if needed

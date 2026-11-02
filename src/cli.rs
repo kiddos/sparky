@@ -32,6 +32,14 @@ pub struct Cli {
     /// Start in mouse click-through mode
     #[arg(long)]
     pub click_through: bool,
+
+    /// Bind address for the JSON-RPC 2.0 server (HTTP and raw TCP)
+    #[arg(long, default_value = "127.0.0.1:6006")]
+    pub rpc_addr: String,
+
+    /// Disable the JSON-RPC server
+    #[arg(long)]
+    pub no_rpc: bool,
 }
 
 #[cfg(test)]
@@ -49,6 +57,8 @@ mod tests {
         assert!((args.fps - 24.0).abs() < f64::EPSILON);
         assert_eq!(args.initial_emotion, None);
         assert!(!args.click_through);
+        assert_eq!(args.rpc_addr, "127.0.0.1:6006");
+        assert!(!args.no_rpc);
     }
 
     #[test]
@@ -67,6 +77,9 @@ mod tests {
             "--initial-emotion",
             "happy",
             "--click-through",
+            "--rpc-addr",
+            "0.0.0.0:8080",
+            "--no-rpc",
         ]);
         assert!(args.profile_run);
         assert_eq!(args.emotions_config, PathBuf::from("custom_emotions.toml"));
@@ -75,5 +88,7 @@ mod tests {
         assert!((args.fps - 30.0).abs() < f64::EPSILON);
         assert_eq!(args.initial_emotion.as_deref(), Some("happy"));
         assert!(args.click_through);
+        assert_eq!(args.rpc_addr, "0.0.0.0:8080");
+        assert!(args.no_rpc);
     }
 }

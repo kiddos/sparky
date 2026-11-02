@@ -1,14 +1,15 @@
+use anyhow::Result;
+use glfw::Context;
 use std::collections::HashMap;
 use std::sync::Arc;
 use std::time::Instant;
-use anyhow::Result;
-use glfw::Context;
-use sysinfo::{get_current_pid, ProcessesToUpdate, System};
+use sysinfo::{ProcessesToUpdate, System, get_current_pid};
 
 mod animation;
 mod brain;
 mod cli;
 mod render;
+mod rpc;
 mod state;
 mod tray;
 mod ui;
@@ -18,6 +19,7 @@ use brain::BrainEngine;
 use clap::Parser;
 use cli::Cli;
 use render::{PetWindow, RenderQuad, ShaderProgram};
+use rpc::{GlfwWakeNotifier, RpcServer};
 use state::{EmotionRegistry, StateMachine};
 use tray::TrayService;
 use ui::ChatState;
@@ -74,7 +76,10 @@ fn main() -> Result<()> {
     }
 
     if clips.is_empty() {
-        log::warn!("No WebP animations loaded from {:?}! Check transcoding.", cli.animations_dir);
+        log::warn!(
+            "No WebP animations loaded from {:?}! Check transcoding.",
+            cli.animations_dir
+        );
     } else {
         log::info!(
             "Loaded {} animation clips: {:?}",
@@ -120,7 +125,32 @@ fn main() -> Result<()> {
     log::info!("Frame pacer configured for {:.1} FPS", cli.fps);
     let mut chat_state = ChatState::new();
 
-    // 5. Initialize Egui for Chat overlay
+    // 5. Initialize JSON-RPC 2.0 Server
+    let rpc_server = if !cli.no_rpc {
+        let thread_safe_glfw = glfw::ThreadSafeGlfw::from(&mut pet_window.glfw);
+        match RpcServer::start(
+            &cli.rpc_addr,
+            emotion_registry.clone(),
+            Box::new(GlfwWakeNotifier::new(thread_safe_glfw)),
+        ) {
+            Ok(server) => {
+                log::info!(
+                    "JSON-RPC server running on http://{} and tcp://{}",
+                    server.local_addr(),
+                    server.local_addr()
+                );
+                Some(server)
+            }
+            Err(e) => {
+                log::warn!("Failed to start JSON-RPC server on {}: {}", cli.rpc_addr, e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // 6. Initialize Egui for Chat overlay
     log::info!("Initializing egui overlay painter and input state...");
     let mut painter = egui_gl_glfw::Painter::new(&pet_window.window);
     let egui_ctx = egui::Context::default();
@@ -151,7 +181,9 @@ fn main() -> Result<()> {
     let mut ram_samples = Vec::new();
 
     // Shader Uniforms
-    log::info!("Configuring chroma-keying shader uniforms (threshold: 0.32, softness: 0.12, despill: 0.85, border_margin: 0.015, border_feather: 0.005)...");
+    log::info!(
+        "Configuring chroma-keying shader uniforms (threshold: 0.32, softness: 0.12, despill: 0.85, border_margin: 0.015, border_feather: 0.005)..."
+    );
     shader.use_program();
     shader.set_int("u_Texture", 0);
     shader.set_vec3("u_KeyColorRGB", 0.0, 1.0, 0.0);
@@ -177,6 +209,23 @@ fn main() -> Result<()> {
         // Pump system tray event loop for responsiveness
         if let Some(ref tray) = tray_service {
             tray.pump_events();
+        }
+
+        // Process JSON-RPC Commands
+        if let Some(ref server) = rpc_server {
+            while let Some(cmd) = server.try_recv_command() {
+                rpc::handle_rpc_command(
+                    cmd,
+                    &mut state_machine,
+                    &emotion_registry,
+                    &mut pet_window,
+                    &mut chat_state,
+                    &brain,
+                    &tray_service,
+                    &mut frame_pacer,
+                    &mut is_visible,
+                );
+            }
         }
 
         // Adjust window size dynamically when chat is toggled
@@ -412,7 +461,10 @@ fn main() -> Result<()> {
                 println!("\n====================================================================");
                 println!("SPARKY PROFILE RUN SUMMARY");
                 println!("====================================================================");
-                println!("Elapsed Time:     {:.2}s", profile_start.elapsed().as_secs_f64());
+                println!(
+                    "Elapsed Time:     {:.2}s",
+                    profile_start.elapsed().as_secs_f64()
+                );
                 println!("Total Frames:     {}", frame_count);
                 println!("Average FPS:      {:.2} FPS", avg_fps);
                 println!("Average CPU:      {:.2}%", avg_cpu);
@@ -421,6 +473,10 @@ fn main() -> Result<()> {
                 break;
             }
         }
+    }
+
+    if let Some(ref server) = rpc_server {
+        server.shutdown();
     }
 
     brain.shutdown();
