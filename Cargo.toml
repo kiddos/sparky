@@ -36,6 +36,7 @@ crossbeam-channel = "0.5"
 parking_lot = "0.12"
 
 # Utilities & Configuration
+clap = { version = "4.5", features = ["derive"] }
 anyhow = "1.0"
 log = "0.4"
 env_logger = "0.11"

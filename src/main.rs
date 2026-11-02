@@ -7,6 +7,7 @@ use sysinfo::{get_current_pid, ProcessesToUpdate, System};
 
 mod animation;
 mod brain;
+mod cli;
 mod render;
 mod state;
 mod tray;
@@ -14,6 +15,8 @@ mod ui;
 
 use animation::{AnimationClip, FramePacer};
 use brain::BrainEngine;
+use clap::Parser;
+use cli::Cli;
 use render::{PetWindow, RenderQuad, ShaderProgram};
 use state::{EmotionRegistry, StateMachine};
 use tray::TrayService;
@@ -25,13 +28,14 @@ const CHAT_EXTRA_HEIGHT: u32 = 304;
 const EXPANDED_HEIGHT: u32 = BASE_HEIGHT + CHAT_EXTRA_HEIGHT;
 
 fn main() -> Result<()> {
+    let cli = Cli::parse();
+
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
         .target(env_logger::Target::Stdout)
         .init();
     log::info!("Starting Sparky the Kitten Desktop Pet (Extensible Emotion Edition)...");
 
-    let args: Vec<String> = std::env::args().collect();
-    let is_profile_run = args.iter().any(|a| a == "--profile-run");
+    let is_profile_run = cli.profile_run;
     if is_profile_run {
         log::info!("Profile run mode enabled (--profile-run: 10s benchmark session)");
     }
@@ -44,14 +48,14 @@ fn main() -> Result<()> {
 
     // 2. Load Declarative Emotion Registry
     let emotion_registry = Arc::new(EmotionRegistry::load_from_toml(
-        "assets/emotions.toml",
-        "assets/animations",
+        &cli.emotions_config,
+        &cli.animations_dir,
     )?);
 
     // 3. Load Available Animations dynamically
-    log::info!("Loading animation clips from assets/animations...");
+    log::info!("Loading animation clips from {:?}...", cli.animations_dir);
     let mut clips: HashMap<String, AnimationClip> = HashMap::new();
-    if let Ok(entries) = std::fs::read_dir("assets/animations") {
+    if let Ok(entries) = std::fs::read_dir(&cli.animations_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("webp") {
@@ -70,7 +74,7 @@ fn main() -> Result<()> {
     }
 
     if clips.is_empty() {
-        log::warn!("No WebP animations loaded from assets/animations! Check transcoding.");
+        log::warn!("No WebP animations loaded from {:?}! Check transcoding.", cli.animations_dir);
     } else {
         log::info!(
             "Loaded {} animation clips: {:?}",
@@ -92,10 +96,28 @@ fn main() -> Result<()> {
         }
     };
 
-    let brain = BrainEngine::spawn("models/gemma-3-270m".into(), emotion_registry.clone());
+    if cli.click_through {
+        pet_window.set_click_through(true);
+        if let Some(ref tray) = tray_service {
+            tray.click_through_item.set_checked(true);
+        }
+    }
+
+    let brain = BrainEngine::spawn(cli.model_path.clone(), emotion_registry.clone());
     let mut state_machine = StateMachine::new(&emotion_registry);
-    let mut frame_pacer = FramePacer::new(24.0);
-    log::info!("Frame pacer configured for 24.0 FPS (~41.67ms frame budget)");
+    if let Some(ref initial_emotion) = cli.initial_emotion {
+        if emotion_registry.get(initial_emotion).is_some() {
+            state_machine.transition_to(initial_emotion, &emotion_registry);
+        } else {
+            log::warn!(
+                "Initial emotion '{}' not found in registry; defaulting to 'sit'",
+                initial_emotion
+            );
+        }
+    }
+
+    let mut frame_pacer = FramePacer::new(cli.fps);
+    log::info!("Frame pacer configured for {:.1} FPS", cli.fps);
     let mut chat_state = ChatState::new();
 
     // 5. Initialize Egui for Chat overlay
