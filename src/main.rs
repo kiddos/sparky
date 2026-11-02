@@ -151,13 +151,15 @@ fn main() -> Result<()> {
     let mut ram_samples = Vec::new();
 
     // Shader Uniforms
-    log::info!("Configuring chroma-keying shader uniforms (threshold: 0.32, softness: 0.12, despill: 0.85)...");
+    log::info!("Configuring chroma-keying shader uniforms (threshold: 0.32, softness: 0.12, despill: 0.85, border_margin: 0.015, border_feather: 0.005)...");
     shader.use_program();
     shader.set_int("u_Texture", 0);
     shader.set_vec3("u_KeyColorRGB", 0.0, 1.0, 0.0);
     shader.set_float("u_Threshold", 0.32);
     shader.set_float("u_Softness", 0.12);
     shader.set_float("u_Despill", 0.85);
+    shader.set_vec2("u_BorderMargin", 0.015, 0.015);
+    shader.set_vec2("u_BorderFeather", 0.005, 0.005);
 
     log::info!("Application loading complete! Entering main event loop.");
 

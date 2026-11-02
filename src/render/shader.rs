@@ -106,6 +106,17 @@ impl ShaderProgram {
         }
     }
 
+    pub fn set_vec2(&self, name: &str, x: f32, y: f32) {
+        if let Ok(c_name) = CString::new(name) {
+            unsafe {
+                let loc = gl::GetUniformLocation(self.id, c_name.as_ptr());
+                if loc >= 0 {
+                    gl::Uniform2f(loc, x, y);
+                }
+            }
+        }
+    }
+
     pub fn set_vec3(&self, name: &str, x: f32, y: f32, z: f32) {
         if let Ok(c_name) = CString::new(name) {
             unsafe {
