@@ -16,6 +16,8 @@ image = { version = "0.25", default-features = false, features = ["webp", "png"]
 # System Tray & Menus (Tauri ecosystem)
 tray-icon = "0.19"
 muda = "0.15"
+
+[target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"
 
 # Local AI & Machine Learning (Candle)

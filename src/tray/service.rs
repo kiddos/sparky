@@ -15,6 +15,14 @@ pub struct TrayService {
 
 impl TrayService {
     pub fn new(registry: &EmotionRegistry) -> anyhow::Result<Self> {
+        // Initialize GTK backend required by tray-icon on Linux
+        #[cfg(target_os = "linux")]
+        if let Err(e) = gtk::init() {
+            log::warn!(
+                "GTK initialization warning (tray icon may not function if required by platform): {e}"
+            );
+        }
+
         let menu = Menu::new();
 
         let show_hide_item = CheckMenuItem::new("Show Sparky", true, true, None);
@@ -57,6 +65,19 @@ impl TrayService {
             quit_item,
             emotion_menu_items,
         })
+    }
+
+    /// Pump the system tray event loop to handle user menu interactions and avoid freezing.
+    pub fn pump_events(&self) {
+        Self::pump();
+    }
+
+    /// Static helper to pump the underlying system tray / GTK event loop.
+    pub fn pump() {
+        #[cfg(target_os = "linux")]
+        while gtk::events_pending() {
+            gtk::main_iteration();
+        }
     }
 
     fn load_or_create_icon<P: AsRef<Path>>(icon_path: P) -> anyhow::Result<Icon> {
@@ -102,5 +123,17 @@ impl TrayService {
         }
 
         Ok(Icon::from_rgba(rgba, w, h)?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tray_pump_does_not_panic() {
+        #[cfg(target_os = "linux")]
+        let _ = gtk::init();
+        TrayService::pump();
     }
 }

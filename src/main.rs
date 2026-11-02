@@ -31,12 +31,6 @@ fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().collect();
     let is_profile_run = args.iter().any(|a| a == "--profile-run");
 
-    // Initialize GTK on Linux before any GUI/tray components
-    #[cfg(target_os = "linux")]
-    let gtk_initialized = gtk::init().is_ok();
-    #[cfg(not(target_os = "linux"))]
-    let gtk_initialized = true;
-
     // 1. Initialize Window & OpenGL
     let mut pet_window = PetWindow::new(BASE_WIDTH, BASE_HEIGHT, "Sparky")?;
     let quad = RenderQuad::new();
@@ -74,20 +68,15 @@ fn main() -> Result<()> {
     }
 
     // 4. Initialize Tray, Brain & State Machine
-    let tray_service = if gtk_initialized {
-        match TrayService::new(&emotion_registry) {
-            Ok(t) => {
-                log::info!("System tray service initialized.");
-                Some(t)
-            }
-            Err(e) => {
-                log::warn!("Failed to initialize tray service: {}", e);
-                None
-            }
+    let tray_service = match TrayService::new(&emotion_registry) {
+        Ok(t) => {
+            log::info!("System tray service initialized.");
+            Some(t)
         }
-    } else {
-        log::warn!("GTK initialization failed; continuing without tray.");
-        None
+        Err(e) => {
+            log::warn!("Failed to initialize tray service: {}", e);
+            None
+        }
     };
 
     let brain = BrainEngine::spawn("models/gemma-3-270m".into(), emotion_registry.clone());
@@ -143,12 +132,9 @@ fn main() -> Result<()> {
 
         pet_window.glfw.wait_events_timeout(timeout);
 
-        // Pump GTK event loop on Linux for system tray responsiveness
-        #[cfg(target_os = "linux")]
-        if gtk_initialized {
-            while gtk::events_pending() {
-                gtk::main_iteration();
-            }
+        // Pump system tray event loop for responsiveness
+        if let Some(ref tray) = tray_service {
+            tray.pump_events();
         }
 
         // Adjust window size dynamically when chat is toggled

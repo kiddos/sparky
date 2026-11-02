@@ -84,7 +84,7 @@ Every agent modifying this codebase must adhere strictly to the following perfor
 | **Resident Memory (RSS)** | $< 205\text{ MB}$ ($< 45\text{ MB}$ lazy) | Downscaled animation frames ($384 \times 216$ RGB24); memory-mapped safetensors (`mmap`). |
 | **GPU Utilization** | $< 2.0\%$ on iGPU | Single textured quad VBO/VAO; no MSAA (`Samples(Some(0))`); simple fragment math. |
 | **Thread Affinity** | Main Thread Only for GL | All OpenGL and GLFW calls **must** execute on the main thread. Worker threads communicate solely via `crossbeam-channel`. |
-| **Linux GTK Pump** | Every loop tick | The GTK event loop (`gtk::main_iteration()`) must be pumped on Linux to prevent system tray menu freezing. |
+| **Linux GTK Pump** | Every loop tick | The GTK event loop (`gtk::main_iteration()`) must be pumped via `TrayService::pump_events()` on Linux to prevent system tray menu freezing. |
 
 ---
 
@@ -150,7 +150,7 @@ sparky/
 ### Module Responsibilities Deep-Dive
 
 #### 1. [`src/main.rs`](file:///home/kiddos/projects/tools/sparky/src/main.rs)
-- **Application Orchestrator:** Initializes GTK 3, GLFW window, OpenGL context, emotion registry, WebP clips, system tray, brain worker, and egui overlay.
+- **Application Orchestrator:** Initializes GLFW window, OpenGL context, emotion registry, WebP clips, system tray, brain worker, and egui overlay.
 - **Dynamic Window & Viewport Management:**
   - Base pet window size: `BASE_WIDTH = 384`, `BASE_HEIGHT = 216`.
   - When the chat overlay is opened, the window expands vertically to `EXPANDED_HEIGHT = 520` (`BASE_HEIGHT + CHAT_EXTRA_HEIGHT`).
@@ -189,7 +189,7 @@ sparky/
   - Boredom timer: If pet sits idle without interaction for $> 180\text{ seconds}$, automatically triggers `naughty`.
 
 #### 6. [`src/tray/`](file:///home/kiddos/projects/tools/sparky/src/tray/mod.rs)
-- [`service.rs`](file:///home/kiddos/projects/tools/sparky/src/tray/service.rs): Builds the system tray using `tray-icon` and `muda`. Dynamically generates the "🐾 Pet Mood" submenu from all entries in `EmotionRegistry`. Generates a fallback 32x32 RGBA orange kitten icon procedurally if `assets/icons/sparky_tray.png` is not provided.
+- [`service.rs`](file:///home/kiddos/projects/tools/sparky/src/tray/service.rs): Encapsulates system tray initialization and event loop pumping using `tray-icon`, `muda`, and GTK. Dynamically generates the "🐾 Pet Mood" submenu from all entries in `EmotionRegistry`. Generates a fallback 32x32 RGBA orange kitten icon procedurally if `assets/icons/sparky_tray.png` is not provided.
 
 #### 7. [`src/ui/`](file:///home/kiddos/projects/tools/sparky/src/ui/mod.rs)
 - [`chat_window.rs`](file:///home/kiddos/projects/tools/sparky/src/ui/chat_window.rs): Immediate-mode chat panel with conversation history, current mood badge (`[😺 Happy]`, `[😏 Smirk]`), thinking indicator, and dynamic suggestion chips derived directly from `EmotionRegistry`.
@@ -370,7 +370,7 @@ If green fringes appear or kitten fur edges are overly cut:
 2. **NO OpenGL Calls off Main Thread:**
    - The GLFW OpenGL context is owned exclusively by the main thread. Never invoke `gl::*` or access `PetWindow` from worker threads.
 3. **NEVER Omit GTK Pumping on Linux:**
-   - `tray-icon` and `muda` rely on GTK under Linux. Pumping `while gtk::events_pending() { gtk::main_iteration(); }` in the main loop is strictly mandatory.
+   - `tray-icon` and `muda` rely on GTK under Linux. Pumping via `tray.pump_events()` in the main loop is strictly mandatory.
 4. **NO CPU-Side Chroma Keying or Alpha Blitting:**
    - All animation frames are passed as raw RGB24 to OpenGL. Keying is done on GPU in `chroma.frag`. Do not add CPU pixel loop masks.
 5. **NO Hardcoded Emotion Enums:**
