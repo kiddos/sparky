@@ -204,6 +204,7 @@ sparky/
   - Calculates alpha via `smoothstep(u_Threshold, u_Threshold + u_Softness, dist)`.
   - Suppresses green despill bleed on fur: `despilledRGB.g = mix(despilledRGB.g, max(R, B), u_Despill)`.
   - Multiplies final color by `u_EmotionTint` for mood tinting.
+  - Clears letterbox/encoding black borders by feathering alpha across `u_BorderMargin` / `u_BorderFeather` and suppressing dark edge artifacts.
 
 ---
 
@@ -350,12 +351,14 @@ prompt_description = "triumphant, chest puffed out, accomplished, proud"
 2. Run `./scripts/transcode_assets.sh` (produces `assets/animations/proud.webp`).
 3. Define `[emotions.proud]` in `assets/emotions.toml`.
 
-### Recipe 2: Tuning GPU Chroma-Keying & Despill
-If green fringes appear or kitten fur edges are overly cut:
-1. Open [`shaders/chroma.frag`](file:///home/kiddos/projects/tools/sparky/shaders/chroma.frag) or update uniforms in [`src/main.rs`](file:///home/kiddos/projects/tools/sparky/src/main.rs#L130-L134):
+### Recipe 2: Tuning GPU Chroma-Keying, Despill & Border Transparency
+If green fringes appear, kitten fur edges are overly cut, or video letterbox borders bleed through:
+1. Open [`shaders/chroma.frag`](file:///home/kiddos/projects/tools/sparky/shaders/chroma.frag) or update uniforms in [`src/main.rs`](file:///home/kiddos/projects/tools/sparky/src/main.rs#L153-L161):
    - `u_Threshold` (default `0.32`): Lower value tightens keying; higher value keys out more greenish tints.
    - `u_Softness` (default `0.12`): Controls edge feathering width.
    - `u_Despill` (default `0.85`): Factor for suppressing green reflections on white/orange fur.
+   - `u_BorderMargin` (default `vec2(0.015, 0.015)`): Width of edge margin where alpha is forced to 0 to eliminate encoding/letterbox black bars.
+   - `u_BorderFeather` (default `vec2(0.005, 0.005)`): Transition feathering width between border margin and interior frame.
 
 ---
 
@@ -377,6 +380,9 @@ If green fringes appear or kitten fur edges are overly cut:
    - Always load emotions through [`EmotionRegistry`](file:///home/kiddos/projects/tools/sparky/src/state/emotion.rs#L57-L61). Do not hardcode static enums or switches over emotion names in code.
 6. **Preserve Sub-Viewport Geometry:**
    - When chat is visible, remember that `quad.draw()` requires `gl::Viewport(0, 0, fb_w, kitten_fb_h)`, and egui requires `gl::Viewport(0, 0, fb_w, fb_h)`. Never mix these viewports.
+7. **NEVER Key Out Black Globally:**
+   - Source animation frames often contain black letterbox lines at frame edges, but the pet's eyes, pupils, mouth, and fur contours contain pure black pixels (`RGB = 0, 0, 0`).
+   - Never apply global black chroma-keying or luminance thresholding across the entire quad. Always bound border/black suppression strictly to frame edges (`minEdgeDist < 0.05`).
 
 ### Shell Tool Preferences
 When executing CLI commands or editing files, adhere to:
