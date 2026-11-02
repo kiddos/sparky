@@ -65,11 +65,14 @@ impl EmotionRegistry {
         config_path: P,
         assets_dir: Q,
     ) -> anyhow::Result<Self> {
-        let content = fs::read_to_string(config_path)?;
+        let config_path_ref = config_path.as_ref();
+        let assets_dir_ref = assets_dir.as_ref();
+        log::info!("Loading emotions configuration from '{}'...", config_path_ref.display());
+        let content = fs::read_to_string(config_path_ref)?;
         let parsed: EmotionConfigFile = toml::from_str(&content)?;
 
         let mut available_assets = Vec::new();
-        if let Ok(entries) = fs::read_dir(assets_dir) {
+        if let Ok(entries) = fs::read_dir(assets_dir_ref) {
             for entry in entries.flatten() {
                 if let Some(name) = entry.file_name().to_str() {
                     available_assets.push(name.to_string());
@@ -97,6 +100,13 @@ impl EmotionRegistry {
         extra_order.sort();
         base_order.retain(|id| emotions.contains_key(id));
         base_order.extend(extra_order);
+
+        log::info!(
+            "Loaded {} emotion definitions from '{}' (registered asset files found: {})",
+            emotions.len(),
+            config_path_ref.display(),
+            available_assets.len()
+        );
 
         Ok(Self {
             emotions,

@@ -9,6 +9,7 @@ pub struct ShaderProgram {
 
 impl ShaderProgram {
     pub fn new(vert_path: &str, frag_path: &str) -> Result<Self> {
+        log::info!("Compiling shader program (vertex: '{vert_path}', fragment: '{frag_path}')");
         let vert_src = fs::read_to_string(vert_path)
             .with_context(|| format!("Failed to read vertex shader from {}", vert_path))?;
         let frag_src = fs::read_to_string(frag_path)
@@ -46,6 +47,7 @@ impl ShaderProgram {
             gl::DeleteShader(frag_shader);
         }
 
+        log::info!("Shader program successfully linked (Program ID: {id})");
         Ok(Self { id })
     }
 

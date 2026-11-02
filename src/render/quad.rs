@@ -68,6 +68,8 @@ impl RenderQuad {
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
 
+        log::info!("Allocated textured render quad (VAO: {vao}, VBO: {vbo}, Texture ID: {texture_id})");
+
         Self {
             vao,
             vbo,

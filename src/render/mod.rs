@@ -43,6 +43,22 @@ impl PetWindow {
         // Load OpenGL function pointers
         gl::load_with(|s| window.get_proc_address(s) as *const _);
 
+        // Query and log OpenGL context details
+        unsafe {
+            let get_gl_string = |name| {
+                let p = gl::GetString(name);
+                if p.is_null() {
+                    "Unknown".to_string()
+                } else {
+                    std::ffi::CStr::from_ptr(p as *const _).to_string_lossy().into_owned()
+                }
+            };
+            let vendor = get_gl_string(gl::VENDOR);
+            let renderer = get_gl_string(gl::RENDERER);
+            let version = get_gl_string(gl::VERSION);
+            log::info!("OpenGL context loaded: {vendor} | {renderer} | Version: {version}");
+        }
+
         // Enable Alpha Blending for Transparency
         unsafe {
             gl::Enable(gl::BLEND);
@@ -61,6 +77,9 @@ impl PetWindow {
         let initial_x = (screen_w - width as i32 - 80).max(0);
         let initial_y = (screen_h - height as i32 - 80).max(0);
         window.set_pos(initial_x, initial_y);
+        log::info!(
+            "PetWindow initialized (size: {width}x{height}, screen: {screen_w}x{screen_h}, position: ({initial_x}, {initial_y}))"
+        );
 
         Ok(Self {
             glfw,

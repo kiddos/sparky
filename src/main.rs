@@ -25,13 +25,19 @@ const CHAT_EXTRA_HEIGHT: u32 = 304;
 const EXPANDED_HEIGHT: u32 = BASE_HEIGHT + CHAT_EXTRA_HEIGHT;
 
 fn main() -> Result<()> {
-    env_logger::init();
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
+        .target(env_logger::Target::Stdout)
+        .init();
     log::info!("Starting Sparky the Kitten Desktop Pet (Extensible Emotion Edition)...");
 
     let args: Vec<String> = std::env::args().collect();
     let is_profile_run = args.iter().any(|a| a == "--profile-run");
+    if is_profile_run {
+        log::info!("Profile run mode enabled (--profile-run: 10s benchmark session)");
+    }
 
     // 1. Initialize Window & OpenGL
+    log::info!("Initializing PetWindow (target base resolution: {BASE_WIDTH}x{BASE_HEIGHT})...");
     let mut pet_window = PetWindow::new(BASE_WIDTH, BASE_HEIGHT, "Sparky")?;
     let quad = RenderQuad::new();
     let shader = ShaderProgram::new("shaders/quad.vert", "shaders/chroma.frag")?;
@@ -43,14 +49,20 @@ fn main() -> Result<()> {
     )?);
 
     // 3. Load Available Animations dynamically
+    log::info!("Loading animation clips from assets/animations...");
     let mut clips: HashMap<String, AnimationClip> = HashMap::new();
     if let Ok(entries) = std::fs::read_dir("assets/animations") {
         for entry in entries.flatten() {
             let path = entry.path();
             if path.extension().and_then(|s| s.to_str()) == Some("webp") {
                 if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
-                    if let Ok(clip) = AnimationClip::load_from_webp(stem, &path) {
-                        clips.insert(stem.to_string(), clip);
+                    match AnimationClip::load_from_webp(stem, &path) {
+                        Ok(clip) => {
+                            clips.insert(stem.to_string(), clip);
+                        }
+                        Err(e) => {
+                            log::warn!("Failed to load animation clip from {:?}: {}", path, e);
+                        }
                     }
                 }
             }
@@ -68,6 +80,7 @@ fn main() -> Result<()> {
     }
 
     // 4. Initialize Tray, Brain & State Machine
+    log::info!("Initializing system tray service...");
     let tray_service = match TrayService::new(&emotion_registry) {
         Ok(t) => {
             log::info!("System tray service initialized.");
@@ -82,9 +95,11 @@ fn main() -> Result<()> {
     let brain = BrainEngine::spawn("models/gemma-3-270m".into(), emotion_registry.clone());
     let mut state_machine = StateMachine::new(&emotion_registry);
     let mut frame_pacer = FramePacer::new(24.0);
+    log::info!("Frame pacer configured for 24.0 FPS (~41.67ms frame budget)");
     let mut chat_state = ChatState::new();
 
     // 5. Initialize Egui for Chat overlay
+    log::info!("Initializing egui overlay painter and input state...");
     let mut painter = egui_gl_glfw::Painter::new(&pet_window.window);
     let egui_ctx = egui::Context::default();
     let (fb_w, _) = pet_window.window.get_framebuffer_size();
@@ -114,12 +129,15 @@ fn main() -> Result<()> {
     let mut ram_samples = Vec::new();
 
     // Shader Uniforms
+    log::info!("Configuring chroma-keying shader uniforms (threshold: 0.32, softness: 0.12, despill: 0.85)...");
     shader.use_program();
     shader.set_int("u_Texture", 0);
     shader.set_vec3("u_KeyColorRGB", 0.0, 1.0, 0.0);
     shader.set_float("u_Threshold", 0.32);
     shader.set_float("u_Softness", 0.12);
     shader.set_float("u_Despill", 0.85);
+
+    log::info!("Application loading complete! Entering main event loop.");
 
     // Main Event Loop
     while !pet_window.window.should_close() {

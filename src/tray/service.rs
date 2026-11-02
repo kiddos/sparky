@@ -41,6 +41,11 @@ impl TrayService {
             mood_submenu.append(&item)?;
         }
 
+        log::info!(
+            "Populated Pet Mood tray submenu with {} emotions",
+            emotion_menu_items.len()
+        );
+
         menu.append(&show_hide_item)?;
         menu.append(&chat_item)?;
         menu.append(&mood_submenu)?;
@@ -81,11 +86,18 @@ impl TrayService {
     }
 
     fn load_or_create_icon<P: AsRef<Path>>(icon_path: P) -> anyhow::Result<Icon> {
-        if let Ok(img) = image::open(icon_path) {
+        let p_ref = icon_path.as_ref();
+        if let Ok(img) = image::open(p_ref) {
             let rgba = img.to_rgba8();
             let (w, h) = rgba.dimensions();
+            log::info!("Loaded system tray icon from '{}' ({}x{})", p_ref.display(), w, h);
             return Ok(Icon::from_rgba(rgba.into_raw(), w, h)?);
         }
+
+        log::info!(
+            "Tray icon '{}' not found; generated procedural 32x32 RGBA icon",
+            p_ref.display()
+        );
 
         // Generate a 32x32 cute orange kitten icon
         let w = 32u32;

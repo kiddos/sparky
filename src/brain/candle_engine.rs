@@ -36,6 +36,7 @@ pub struct BrainEngine {
 
 impl BrainEngine {
     pub fn spawn(model_dir: PathBuf, registry: Arc<EmotionRegistry>) -> Self {
+        log::info!("Spawning cognitive worker thread 'sparky-brain' (model path: {:?})...", model_dir);
         let (req_tx, req_rx) = crossbeam_channel::unbounded::<BrainRequest>();
         let (res_tx, res_rx) = crossbeam_channel::unbounded::<BrainResponse>();
 
