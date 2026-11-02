@@ -1,0 +1,50 @@
+[package]
+name = "sparky"
+version = "0.1.0"
+edition = "2024"
+authors = ["Sparky Desktop Pet Developers"]
+description = "Ultra-low-resource hardware-accelerated desktop pet powered by Gemma 3 270M"
+
+[dependencies]
+# Windowing & OpenGL
+glfw = "0.59"
+gl = "0.14"
+
+# Image & Animation Decoding
+image = { version = "0.25", default-features = false, features = ["webp", "png"] }
+
+# System Tray & Menus (Tauri ecosystem)
+tray-icon = "0.19"
+muda = "0.15"
+gtk = "0.18"
+
+# Local AI & Machine Learning (Candle)
+candle-core = { version = "0.8" }
+candle-nn = { version = "0.8" }
+candle-transformers = { version = "0.8" }
+tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
+safetensors = "0.5"
+
+# Immediate-Mode Chat UI
+egui = "0.31"
+egui_gl_glfw = "0.1.13"
+
+# Asynchronous & Concurrency
+crossbeam-channel = "0.5"
+parking_lot = "0.12"
+
+# Utilities & Configuration
+anyhow = "1.0"
+log = "0.4"
+env_logger = "0.11"
+sysinfo = "0.33"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+toml = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true
