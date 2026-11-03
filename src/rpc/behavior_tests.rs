@@ -767,5 +767,33 @@ fn test_pet_behavior_error_handling() {
                 .unwrap()
                 .contains("Method not found")
         );
+
+        // 4. Aliases are rejected as unknown methods
+        let err4 = client.call_error("pet", json!({}));
+        assert_eq!(err4["code"], -32601);
+        assert!(
+            err4["message"]
+                .as_str()
+                .unwrap()
+                .contains("Method not found")
+        );
+
+        let err5 = client.call_error("get_state", json!({}));
+        assert_eq!(err5["code"], -32601);
+        assert!(
+            err5["message"]
+                .as_str()
+                .unwrap()
+                .contains("Method not found")
+        );
+
+        let err6 = client.call_error("version", json!({}));
+        assert_eq!(err6["code"], -32601);
+        assert!(
+            err6["message"]
+                .as_str()
+                .unwrap()
+                .contains("Method not found")
+        );
     });
 }

@@ -160,60 +160,20 @@ pub fn is_main_thread_method(method: &str) -> bool {
     matches!(
         method,
         "sparky.get_state"
-            | "get_state"
-            | "get_status"
-            | "sparky.get_status"
-            | "sparky_getStatus"
-            | "sparky_getState"
             | "sparky.get_frame"
-            | "get_frame"
-            | "sparky.get_display_frame"
-            | "get_display_frame"
-            | "sparky_getFrame"
-            | "sparky_getDisplayFrame"
             | "sparky.set_emotion"
-            | "set_emotion"
-            | "sparky_setEmotion"
             | "sparky.pet"
-            | "pet"
-            | "sparky_pet"
             | "sparky.poke"
-            | "poke"
-            | "sparky_poke"
             | "sparky.touch"
-            | "touch"
-            | "sparky_touch"
             | "sparky.send_chat"
-            | "send_chat"
-            | "chat"
-            | "sparky.chat"
-            | "sparky_sendChat"
             | "sparky.get_chat_history"
-            | "get_chat_history"
-            | "get_messages"
-            | "sparky_getChatHistory"
             | "sparky.clear_chat"
-            | "clear_chat"
-            | "sparky_clearChat"
             | "sparky.set_visible"
-            | "set_visible"
-            | "sparky_setVisible"
             | "sparky.set_click_through"
-            | "set_click_through"
-            | "sparky_setClickThrough"
             | "sparky.set_chat_visible"
-            | "set_chat_visible"
-            | "sparky_setChatVisible"
             | "sparky.set_position"
-            | "set_position"
-            | "sparky_setPosition"
             | "sparky.get_position"
-            | "get_position"
-            | "sparky_getPosition"
             | "sparky.quit"
-            | "quit"
-            | "exit"
-            | "sparky_quit"
     )
 }
 
@@ -223,22 +183,16 @@ pub fn try_handle_direct(
     registry: &Arc<EmotionRegistry>,
 ) -> Option<Result<serde_json::Value, RpcError>> {
     match method {
-        "sparky.list_emotions"
-        | "list_emotions"
-        | "get_emotions"
-        | "sparky.get_emotions"
-        | "sparky_listEmotions" => {
+        "sparky.list_emotions" => {
             let emotions: Vec<_> = registry.all_emotions().collect();
             Some(serde_json::to_value(&emotions).map_err(|e| RpcError::internal(e.to_string())))
         }
-        "sparky.version" | "version" | "sparky_version" => Some(Ok(json!({
+        "sparky.version" => Some(Ok(json!({
             "name": env!("CARGO_PKG_NAME"),
             "version": env!("CARGO_PKG_VERSION"),
             "description": env!("CARGO_PKG_DESCRIPTION"),
         }))),
-        "rpc.discover" | "sparky.list_methods" | "list_methods" | "rpc_discover" => {
-            Some(Ok(discover_rpc_methods()))
-        }
+        "rpc.discover" => Some(Ok(discover_rpc_methods())),
         _ => None,
     }
 }
@@ -255,14 +209,12 @@ pub fn discover_rpc_methods() -> serde_json::Value {
         "methods": [
             {
                 "name": "sparky.get_state",
-                "aliases": ["get_state", "get_status", "sparky.get_status", "sparky_getStatus"],
                 "description": "Returns full desktop pet state including current emotion, active clip, window position and visibility, and chat status",
                 "params": [],
                 "result": { "description": "Current state object" }
             },
             {
                 "name": "sparky.get_frame",
-                "aliases": ["get_frame", "get_display_frame", "sparky.get_display_frame", "sparky_getFrame", "sparky_getDisplayFrame"],
                 "description": "Captures the current display frame (from rendered window framebuffer or animation clip) as PNG with metadata and base64 encoding",
                 "params": [
                     { "name": "source", "description": "'framebuffer' (rendered window) or 'clip' (source animation frame)", "required": false, "schema": { "type": "string" } },
@@ -273,7 +225,6 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.set_emotion",
-                "aliases": ["set_emotion", "sparky_setEmotion"],
                 "description": "Transitions the pet to a specific emotion (e.g. sit, happy, angry, naughty, sad, smirk, proud)",
                 "params": [
                     { "name": "emotion", "description": "Target emotion ID", "required": true, "schema": { "type": "string" } }
@@ -282,35 +233,30 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.list_emotions",
-                "aliases": ["list_emotions", "get_emotions", "sparky.get_emotions", "sparky_listEmotions"],
                 "description": "Lists all registered emotions and their configurations (loop mode, duration, fallback, tint)",
                 "params": [],
                 "result": { "description": "Array of emotion definitions" }
             },
             {
                 "name": "sparky.pet",
-                "aliases": ["pet", "sparky_pet"],
                 "description": "Simulates petting Sparky, transitioning him to 'happy'",
                 "params": [],
                 "result": { "description": "Result indicating transition to happy" }
             },
             {
                 "name": "sparky.poke",
-                "aliases": ["poke", "sparky_poke"],
                 "description": "Simulates poking Sparky, transitioning him to 'angry'",
                 "params": [],
                 "result": { "description": "Result indicating transition to angry" }
             },
             {
                 "name": "sparky.touch",
-                "aliases": ["touch", "sparky_touch"],
                 "description": "Registers user interaction, resetting the boredom timer",
                 "params": [],
                 "result": { "description": "Success confirmation" }
             },
             {
                 "name": "sparky.send_chat",
-                "aliases": ["send_chat", "chat", "sparky.chat", "sparky_sendChat"],
                 "description": "Sends a message/prompt to Sparky's cognitive brain engine",
                 "params": [
                     { "name": "prompt", "description": "Message text to send to Sparky", "required": true, "schema": { "type": "string" } }
@@ -319,21 +265,18 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.get_chat_history",
-                "aliases": ["get_chat_history", "sparky_getChatHistory"],
                 "description": "Returns the conversation message history",
                 "params": [],
                 "result": { "description": "Array of {sender, message} objects" }
             },
             {
                 "name": "sparky.clear_chat",
-                "aliases": ["clear_chat", "sparky_clearChat"],
                 "description": "Clears conversation history and resets to default greeting",
                 "params": [],
                 "result": { "description": "Success confirmation" }
             },
             {
                 "name": "sparky.set_visible",
-                "aliases": ["set_visible", "sparky_setVisible"],
                 "description": "Show or hide the desktop pet window",
                 "params": [
                     { "name": "visible", "description": "Window visibility state", "required": true, "schema": { "type": "boolean" } }
@@ -342,7 +285,6 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.set_click_through",
-                "aliases": ["set_click_through", "sparky_setClickThrough"],
                 "description": "Enable or disable mouse click-through mode",
                 "params": [
                     { "name": "click_through", "description": "Click-through state", "required": true, "schema": { "type": "boolean" } }
@@ -351,7 +293,6 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.set_chat_visible",
-                "aliases": ["set_chat_visible", "sparky_setChatVisible"],
                 "description": "Toggle egui chat overlay visibility",
                 "params": [
                     { "name": "visible", "description": "Chat visibility state", "required": true, "schema": { "type": "boolean" } }
@@ -360,7 +301,6 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.set_position",
-                "aliases": ["set_position", "sparky_setPosition"],
                 "description": "Sets the desktop position (x, y) of the pet window",
                 "params": [
                     { "name": "x", "description": "Screen X position", "required": true, "schema": { "type": "integer" } },
@@ -370,28 +310,24 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.get_position",
-                "aliases": ["get_position", "sparky_getPosition"],
                 "description": "Gets current screen position (x, y) of the pet window",
                 "params": [],
                 "result": { "description": "Object with {x, y}" }
             },
             {
                 "name": "sparky.quit",
-                "aliases": ["quit", "exit", "sparky_quit"],
                 "description": "Gracefully terminates Sparky application",
                 "params": [],
                 "result": { "description": "Shutdown status" }
             },
             {
                 "name": "sparky.version",
-                "aliases": ["version", "sparky_version"],
                 "description": "Returns application version and metadata",
                 "params": [],
                 "result": { "description": "Version metadata" }
             },
             {
                 "name": "rpc.discover",
-                "aliases": ["list_methods", "sparky.list_methods", "rpc_discover"],
                 "description": "Discovers all supported RPC methods and specifications",
                 "params": [],
                 "result": { "description": "OpenRPC discovery schema" }
@@ -416,8 +352,7 @@ pub fn execute_main_thread_command(
     clips: &HashMap<String, AnimationClip>,
 ) -> Result<serde_json::Value, RpcError> {
     match method {
-        "sparky.get_state" | "get_state" | "get_status" | "sparky.get_status"
-        | "sparky_getStatus" | "sparky_getState" => {
+        "sparky.get_state" => {
             let (win_x, win_y) = pet_window.window.get_pos();
             let (win_w, win_h) = pet_window.window.get_size();
             Ok(json!({
@@ -440,12 +375,7 @@ pub fn execute_main_thread_command(
                 "fps": frame_pacer.target_fps(),
             }))
         }
-        "sparky.get_frame"
-        | "get_frame"
-        | "sparky.get_display_frame"
-        | "get_display_frame"
-        | "sparky_getFrame"
-        | "sparky_getDisplayFrame" => {
+        "sparky.get_frame" => {
             let requested_source = extract_string_param(params, &["source"])
                 .unwrap_or_else(|| "framebuffer".to_string());
             let include_data = extract_bool_param(params, &["include_data"]).unwrap_or(true);
@@ -542,7 +472,7 @@ pub fn execute_main_thread_command(
 
             Ok(result)
         }
-        "sparky.set_emotion" | "set_emotion" | "sparky_setEmotion" => {
+        "sparky.set_emotion" => {
             let emotion_id =
                 extract_string_param(params, &["emotion", "name", "id"]).ok_or_else(|| {
                     RpcError::invalid_params("Missing or invalid 'emotion' parameter")
@@ -566,7 +496,7 @@ pub fn execute_main_thread_command(
                 )))
             }
         }
-        "sparky.pet" | "pet" | "sparky_pet" => {
+        "sparky.pet" => {
             state_machine.on_pet(emotion_registry);
             chat_state.current_emotion_id = "happy".to_string();
             frame_pacer.reset();
@@ -575,7 +505,7 @@ pub fn execute_main_thread_command(
                 "emotion": state_machine.current_emotion,
             }))
         }
-        "sparky.poke" | "poke" | "sparky_poke" => {
+        "sparky.poke" => {
             state_machine.on_poke(emotion_registry);
             chat_state.current_emotion_id = "angry".to_string();
             frame_pacer.reset();
@@ -584,11 +514,11 @@ pub fn execute_main_thread_command(
                 "emotion": state_machine.current_emotion,
             }))
         }
-        "sparky.touch" | "touch" | "sparky_touch" => {
+        "sparky.touch" => {
             state_machine.touch_interaction();
             Ok(json!({ "success": true }))
         }
-        "sparky.send_chat" | "send_chat" | "chat" | "sparky.chat" | "sparky_sendChat" => {
+        "sparky.send_chat" => {
             let prompt =
                 extract_string_param(params, &["prompt", "message", "text"]).ok_or_else(|| {
                     RpcError::invalid_params("Missing or invalid 'prompt' or 'message' parameter")
@@ -608,10 +538,7 @@ pub fn execute_main_thread_command(
                 "prompt": prompt,
             }))
         }
-        "sparky.get_chat_history"
-        | "get_chat_history"
-        | "get_messages"
-        | "sparky_getChatHistory" => {
+        "sparky.get_chat_history" => {
             let history: Vec<_> = chat_state
                 .messages
                 .iter()
@@ -619,7 +546,7 @@ pub fn execute_main_thread_command(
                 .collect();
             Ok(json!(history))
         }
-        "sparky.clear_chat" | "clear_chat" | "sparky_clearChat" => {
+        "sparky.clear_chat" => {
             chat_state.messages.clear();
             chat_state.messages.push((
                 "Sparky".to_string(),
@@ -627,7 +554,7 @@ pub fn execute_main_thread_command(
             ));
             Ok(json!({ "success": true }))
         }
-        "sparky.set_visible" | "set_visible" | "sparky_setVisible" => {
+        "sparky.set_visible" => {
             let visible =
                 extract_bool_param(params, &["visible", "value", "enabled"]).ok_or_else(|| {
                     RpcError::invalid_params("Missing or invalid 'visible' boolean parameter")
@@ -646,7 +573,7 @@ pub fn execute_main_thread_command(
 
             Ok(json!({ "success": true, "visible": visible }))
         }
-        "sparky.set_click_through" | "set_click_through" | "sparky_setClickThrough" => {
+        "sparky.set_click_through" => {
             let click_through = extract_bool_param(params, &["click_through", "value", "enabled"])
                 .ok_or_else(|| {
                     RpcError::invalid_params("Missing or invalid 'click_through' boolean parameter")
@@ -660,7 +587,7 @@ pub fn execute_main_thread_command(
 
             Ok(json!({ "success": true, "click_through": click_through }))
         }
-        "sparky.set_chat_visible" | "set_chat_visible" | "sparky_setChatVisible" => {
+        "sparky.set_chat_visible" => {
             let visible =
                 extract_bool_param(params, &["visible", "value", "enabled"]).ok_or_else(|| {
                     RpcError::invalid_params("Missing or invalid 'visible' boolean parameter")
@@ -669,7 +596,7 @@ pub fn execute_main_thread_command(
             chat_state.is_visible = visible;
             Ok(json!({ "success": true, "chat_visible": visible }))
         }
-        "sparky.set_position" | "set_position" | "sparky_setPosition" => {
+        "sparky.set_position" => {
             let (x, y) = extract_pos_params(params).ok_or_else(|| {
                 RpcError::invalid_params("Missing or invalid coordinates. Provide {x, y} or [x, y]")
             })?;
@@ -677,11 +604,11 @@ pub fn execute_main_thread_command(
             pet_window.window.set_pos(x, y);
             Ok(json!({ "success": true, "x": x, "y": y }))
         }
-        "sparky.get_position" | "get_position" | "sparky_getPosition" => {
+        "sparky.get_position" => {
             let (x, y) = pet_window.window.get_pos();
             Ok(json!({ "x": x, "y": y }))
         }
-        "sparky.quit" | "quit" | "exit" | "sparky_quit" => {
+        "sparky.quit" => {
             pet_window.window.set_should_close(true);
             Ok(json!({ "success": true, "message": "Sparky shutting down" }))
         }
@@ -795,6 +722,90 @@ mod tests {
         assert!(methods.iter().any(|m| m["name"] == "sparky.set_emotion"));
         assert!(methods.iter().any(|m| m["name"] == "sparky.send_chat"));
         assert!(methods.iter().any(|m| m["name"] == "sparky.pet"));
+        assert!(methods.iter().all(|m| m.get("aliases").is_none()));
+    }
+
+    #[test]
+    fn test_aliases_removed() {
+        let registry = Arc::new(
+            EmotionRegistry::load_from_toml("assets/emotions.toml", "assets/animations")
+                .expect("Failed to load emotions"),
+        );
+
+        // Direct methods reject aliases
+        assert!(try_handle_direct("version", &registry).is_none());
+        assert!(try_handle_direct("sparky_version", &registry).is_none());
+        assert!(try_handle_direct("list_emotions", &registry).is_none());
+        assert!(try_handle_direct("get_emotions", &registry).is_none());
+        assert!(try_handle_direct("sparky.get_emotions", &registry).is_none());
+        assert!(try_handle_direct("sparky_listEmotions", &registry).is_none());
+        assert!(try_handle_direct("list_methods", &registry).is_none());
+        assert!(try_handle_direct("sparky.list_methods", &registry).is_none());
+        assert!(try_handle_direct("rpc_discover", &registry).is_none());
+
+        // Direct methods accept canonical names
+        assert!(try_handle_direct("sparky.version", &registry).is_some());
+        assert!(try_handle_direct("sparky.list_emotions", &registry).is_some());
+        assert!(try_handle_direct("rpc.discover", &registry).is_some());
+
+        // Main thread methods reject aliases
+        assert!(!is_main_thread_method("get_state"));
+        assert!(!is_main_thread_method("get_status"));
+        assert!(!is_main_thread_method("sparky.get_status"));
+        assert!(!is_main_thread_method("sparky_getStatus"));
+        assert!(!is_main_thread_method("sparky_getState"));
+        assert!(!is_main_thread_method("get_frame"));
+        assert!(!is_main_thread_method("get_display_frame"));
+        assert!(!is_main_thread_method("sparky.get_display_frame"));
+        assert!(!is_main_thread_method("sparky_getFrame"));
+        assert!(!is_main_thread_method("sparky_getDisplayFrame"));
+        assert!(!is_main_thread_method("set_emotion"));
+        assert!(!is_main_thread_method("sparky_setEmotion"));
+        assert!(!is_main_thread_method("pet"));
+        assert!(!is_main_thread_method("sparky_pet"));
+        assert!(!is_main_thread_method("poke"));
+        assert!(!is_main_thread_method("sparky_poke"));
+        assert!(!is_main_thread_method("touch"));
+        assert!(!is_main_thread_method("sparky_touch"));
+        assert!(!is_main_thread_method("send_chat"));
+        assert!(!is_main_thread_method("chat"));
+        assert!(!is_main_thread_method("sparky.chat"));
+        assert!(!is_main_thread_method("sparky_sendChat"));
+        assert!(!is_main_thread_method("get_chat_history"));
+        assert!(!is_main_thread_method("get_messages"));
+        assert!(!is_main_thread_method("sparky_getChatHistory"));
+        assert!(!is_main_thread_method("clear_chat"));
+        assert!(!is_main_thread_method("sparky_clearChat"));
+        assert!(!is_main_thread_method("set_visible"));
+        assert!(!is_main_thread_method("sparky_setVisible"));
+        assert!(!is_main_thread_method("set_click_through"));
+        assert!(!is_main_thread_method("sparky_setClickThrough"));
+        assert!(!is_main_thread_method("set_chat_visible"));
+        assert!(!is_main_thread_method("sparky_setChatVisible"));
+        assert!(!is_main_thread_method("set_position"));
+        assert!(!is_main_thread_method("sparky_setPosition"));
+        assert!(!is_main_thread_method("get_position"));
+        assert!(!is_main_thread_method("sparky_getPosition"));
+        assert!(!is_main_thread_method("quit"));
+        assert!(!is_main_thread_method("exit"));
+        assert!(!is_main_thread_method("sparky_quit"));
+
+        // Main thread methods accept canonical names
+        assert!(is_main_thread_method("sparky.get_state"));
+        assert!(is_main_thread_method("sparky.get_frame"));
+        assert!(is_main_thread_method("sparky.set_emotion"));
+        assert!(is_main_thread_method("sparky.pet"));
+        assert!(is_main_thread_method("sparky.poke"));
+        assert!(is_main_thread_method("sparky.touch"));
+        assert!(is_main_thread_method("sparky.send_chat"));
+        assert!(is_main_thread_method("sparky.get_chat_history"));
+        assert!(is_main_thread_method("sparky.clear_chat"));
+        assert!(is_main_thread_method("sparky.set_visible"));
+        assert!(is_main_thread_method("sparky.set_click_through"));
+        assert!(is_main_thread_method("sparky.set_chat_visible"));
+        assert!(is_main_thread_method("sparky.set_position"));
+        assert!(is_main_thread_method("sparky.get_position"));
+        assert!(is_main_thread_method("sparky.quit"));
     }
 
     #[test]
