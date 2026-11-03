@@ -1,8 +1,8 @@
+use crate::state::emotion::EmotionRegistry;
+use muda::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use std::collections::HashMap;
 use std::path::Path;
-use muda::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tray_icon::{Icon, TrayIcon, TrayIconBuilder};
-use crate::state::emotion::EmotionRegistry;
 
 pub struct TrayService {
     _tray_icon: TrayIcon,
@@ -90,7 +90,12 @@ impl TrayService {
         if let Ok(img) = image::open(p_ref) {
             let rgba = img.to_rgba8();
             let (w, h) = rgba.dimensions();
-            log::info!("Loaded system tray icon from '{}' ({}x{})", p_ref.display(), w, h);
+            log::info!(
+                "Loaded system tray icon from '{}' ({}x{})",
+                p_ref.display(),
+                w,
+                h
+            );
             return Ok(Icon::from_rgba(rgba.into_raw(), w, h)?);
         }
 
@@ -112,9 +117,9 @@ impl TrayService {
 
                 // Cat face circular body
                 if dist <= 12.0 {
-                    rgba[idx] = 255;     // R
+                    rgba[idx] = 255; // R
                     rgba[idx + 1] = 140; // G
-                    rgba[idx + 2] = 0;   // B
+                    rgba[idx + 2] = 0; // B
                     rgba[idx + 3] = 255; // A
                 }
                 // Cat ears

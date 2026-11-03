@@ -1,5 +1,5 @@
-use egui::{Color32, Context, RichText, ScrollArea, TextEdit, Vec2};
 use crate::state::emotion::EmotionRegistry;
+use egui::{Color32, Context, RichText, ScrollArea, TextEdit, Vec2};
 
 pub struct ChatState {
     pub is_visible: bool,
@@ -121,8 +121,8 @@ impl ChatState {
                                 .desired_width(text_width),
                         );
 
-                        let enter_pressed = response.lost_focus()
-                            && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                        let enter_pressed =
+                            response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
 
                         let send_clicked = ui
                             .add_enabled(!self.is_generating, egui::Button::new("Send"))

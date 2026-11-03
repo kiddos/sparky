@@ -50,7 +50,9 @@ impl PetWindow {
                 if p.is_null() {
                     "Unknown".to_string()
                 } else {
-                    std::ffi::CStr::from_ptr(p as *const _).to_string_lossy().into_owned()
+                    std::ffi::CStr::from_ptr(p as *const _)
+                        .to_string_lossy()
+                        .into_owned()
                 }
             };
             let vendor = get_gl_string(gl::VENDOR);

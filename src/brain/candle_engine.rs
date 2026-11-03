@@ -1,19 +1,22 @@
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
-use crossbeam_channel::{Receiver, Sender};
 use candle_core::{DType, Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::gemma3::{Config as Gemma3Config, Model as Gemma3Model};
+use crossbeam_channel::{Receiver, Sender};
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::Arc;
+use std::time::Duration;
 use tokenizers::Tokenizer;
 
 use crate::brain::prompt::{extract_action_tag, format_chat_prompt};
 use crate::state::emotion::EmotionRegistry;
 
 pub enum BrainRequest {
-    Chat { prompt: String, max_tokens: usize },
+    Chat {
+        prompt: String,
+        max_tokens: usize,
+    },
     #[allow(dead_code)]
     Interrupt,
     Shutdown,
@@ -36,7 +39,10 @@ pub struct BrainEngine {
 
 impl BrainEngine {
     pub fn spawn(model_dir: PathBuf, registry: Arc<EmotionRegistry>) -> Self {
-        log::info!("Spawning cognitive worker thread 'sparky-brain' (model path: {:?})...", model_dir);
+        log::info!(
+            "Spawning cognitive worker thread 'sparky-brain' (model path: {:?})...",
+            model_dir
+        );
         let (req_tx, req_rx) = crossbeam_channel::unbounded::<BrainRequest>();
         let (res_tx, res_rx) = crossbeam_channel::unbounded::<BrainResponse>();
 
@@ -134,7 +140,10 @@ impl BrainEngine {
         };
 
         let device = Device::Cpu;
-        log::info!("Loading Gemma 3 weights from {:?} onto CPU...", weights_path);
+        log::info!(
+            "Loading Gemma 3 weights from {:?} onto CPU...",
+            weights_path
+        );
         let vb = match unsafe {
             VarBuilder::from_mmaped_safetensors(&[weights_path], DType::F32, &device)
         } {
@@ -162,11 +171,7 @@ impl BrainEngine {
         })
     }
 
-    fn generate_fallback(
-        prompt: &str,
-        registry: &EmotionRegistry,
-        sender: &Sender<BrainResponse>,
-    ) {
+    fn generate_fallback(prompt: &str, registry: &EmotionRegistry, sender: &Sender<BrainResponse>) {
         let p = prompt.to_lowercase();
         let (reply, action) = if p.contains("fish")
             || p.contains("treat")
@@ -317,8 +322,7 @@ impl LoadedBrain {
         let mut all_tokens: Vec<u32> = prompt_token_ids.to_vec();
         let mut generated_text = String::new();
 
-        let mut input_tensor =
-            Tensor::new(prompt_token_ids, &self.device)?.unsqueeze(0)?;
+        let mut input_tensor = Tensor::new(prompt_token_ids, &self.device)?.unsqueeze(0)?;
         let mut logits = self.model.forward(&input_tensor, 0)?;
 
         let mut next_token = logits_processor.sample(&logits.squeeze(0)?.squeeze(0)?)?;
@@ -337,7 +341,9 @@ impl LoadedBrain {
             }
 
             input_tensor = Tensor::new(&[next_token], &self.device)?.unsqueeze(0)?;
-            logits = self.model.forward(&input_tensor, prompt_token_ids.len() + index)?;
+            logits = self
+                .model
+                .forward(&input_tensor, prompt_token_ids.len() + index)?;
             next_token = logits_processor.sample(&logits.squeeze(0)?.squeeze(0)?)?;
             all_tokens.push(next_token);
         }

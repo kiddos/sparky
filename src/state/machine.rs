@@ -1,5 +1,5 @@
-use std::time::{Duration, Instant};
 use crate::state::emotion::{EmotionRegistry, LoopMode};
+use std::time::{Duration, Instant};
 
 pub struct StateMachine {
     pub current_emotion: String,
@@ -12,7 +12,9 @@ pub struct StateMachine {
 impl StateMachine {
     pub fn new(registry: &EmotionRegistry) -> Self {
         let (clip, tint) = registry.resolve_visuals("sit");
-        log::info!("State machine initialized (initial emotion: 'sit', clip: '{clip}', tint: {tint:?})");
+        log::info!(
+            "State machine initialized (initial emotion: 'sit', clip: '{clip}', tint: {tint:?})"
+        );
         Self {
             current_emotion: "sit".to_string(),
             active_clip_name: clip,

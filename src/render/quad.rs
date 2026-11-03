@@ -11,10 +11,7 @@ impl RenderQuad {
     pub fn new() -> Self {
         let vertices: [f32; 16] = [
             // pos(x,y)   // tex(u,v)
-            -1.0, -1.0,   0.0, 0.0,
-             1.0, -1.0,   1.0, 0.0,
-            -1.0,  1.0,   0.0, 1.0,
-             1.0,  1.0,   1.0, 1.0,
+            -1.0, -1.0, 0.0, 0.0, 1.0, -1.0, 1.0, 0.0, -1.0, 1.0, 0.0, 1.0, 1.0, 1.0, 1.0, 1.0,
         ];
 
         let mut vao = 0;
@@ -68,7 +65,9 @@ impl RenderQuad {
             gl::BindBuffer(gl::ARRAY_BUFFER, 0);
         }
 
-        log::info!("Allocated textured render quad (VAO: {vao}, VBO: {vbo}, Texture ID: {texture_id})");
+        log::info!(
+            "Allocated textured render quad (VAO: {vao}, VBO: {vbo}, Texture ID: {texture_id})"
+        );
 
         Self {
             vao,

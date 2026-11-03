@@ -1,4 +1,4 @@
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result, bail};
 use std::ffi::CString;
 use std::fs;
 use std::ptr;
@@ -30,12 +30,7 @@ impl ShaderProgram {
                 let mut len = 0;
                 gl::GetProgramiv(id, gl::INFO_LOG_LENGTH, &mut len);
                 let mut buffer = vec![0u8; len as usize];
-                gl::GetProgramInfoLog(
-                    id,
-                    len,
-                    ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut i8,
-                );
+                gl::GetProgramInfoLog(id, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut i8);
                 let error_msg = String::from_utf8_lossy(&buffer);
                 gl::DeleteShader(vert_shader);
                 gl::DeleteShader(frag_shader);
@@ -64,12 +59,7 @@ impl ShaderProgram {
                 let mut len = 0;
                 gl::GetShaderiv(shader, gl::INFO_LOG_LENGTH, &mut len);
                 let mut buffer = vec![0u8; len as usize];
-                gl::GetShaderInfoLog(
-                    shader,
-                    len,
-                    ptr::null_mut(),
-                    buffer.as_mut_ptr() as *mut i8,
-                );
+                gl::GetShaderInfoLog(shader, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut i8);
                 let error_msg = String::from_utf8_lossy(&buffer);
                 gl::DeleteShader(shader);
                 bail!("Shader compilation failed for {}: {}", path, error_msg);

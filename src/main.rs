@@ -224,6 +224,7 @@ fn main() -> Result<()> {
                     &tray_service,
                     &mut frame_pacer,
                     &mut is_visible,
+                    &clips,
                 );
             }
         }

@@ -1,8 +1,8 @@
+use image::codecs::webp::WebPDecoder;
+use image::{AnimationDecoder, DynamicImage};
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use image::codecs::webp::WebPDecoder;
-use image::{AnimationDecoder, DynamicImage};
 
 pub struct Frame {
     pub rgb_data: Vec<u8>,
