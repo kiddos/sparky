@@ -143,8 +143,9 @@ sparky/
     │   └── service.rs              # TrayService: tray-icon + muda menu, dynamic mood submenu, procedural 32x32 icon
     │
     ├── rpc/
-    │   ├── mod.rs                  # Module exports, re-exports, test suite
-    │   ├── handler.rs              # RPC method dispatch, parameter extraction, OpenRPC discovery
+    │   ├── mod.rs                  # Module exports, re-exports, protocol test suite
+    │   ├── behavior_tests.rs       # End-to-end pet behavioral & visual frame capture test suite
+    │   ├── handler.rs              # RPC method dispatch, base64 encode/decode, PNG encoding, OpenRPC discovery
     │   ├── protocol.rs             # JSON-RPC 2.0 specifications (Request, Response, Error, ID, Batch)
     │   └── server.rs               # Dual HTTP/raw TCP server, GLFW wake notifier, connection worker pool
     │
@@ -204,6 +205,8 @@ sparky/
 - **JSON-RPC 2.0 Dual Transport Server:** Exposes a high-performance, non-blocking JSON-RPC 2.0 interface supporting both HTTP POST (with CORS headers for web/tool integration) and raw line-delimited TCP (for scripts, `nc`, and IPC) on the same port (default `127.0.0.1:6006`).
 - **GLFW Event Loop Waking:** Uses [`GlfwWakeNotifier`](file:///home/kiddos/projects/tools/sparky/src/rpc/server.rs) (`glfw.post_empty_event()`) to wake up the main thread instantly upon receiving remote commands, guaranteeing $\le 0.3\%$ idle CPU without polling.
 - **Remote Operations:** Supports controlling emotions (`sparky.set_emotion`), pet status inspection (`sparky.get_state`), visual display frame capture (`sparky.get_frame`), interactions (`sparky.pet`, `sparky.poke`), AI chat generation (`sparky.send_chat`, `sparky.get_chat_history`), window geometry & click-through (`sparky.set_position`, `sparky.set_visible`, `sparky.set_click_through`), and introspection (`rpc.discover`, `sparky.list_emotions`).
+- **Frame Capture & Visual Verification:** `sparky.get_frame` captures raw clip frames or rendered framebuffers as base64 PNGs with disk saving (`save_path`), allowing remote visual verification.
+- **Behavioral Test Suite ([`src/rpc/behavior_tests.rs`](file:///home/kiddos/projects/tools/sparky/src/rpc/behavior_tests.rs)):** Automated test harness driving the pet state machine, windowing, and frame decoding over persistent TCP sockets with terminal ANSI truecolor visualization.
 
 #### 9. [`shaders/`](file:///home/kiddos/projects/tools/sparky/shaders/)
 - [`quad.vert`](file:///home/kiddos/projects/tools/sparky/shaders/quad.vert): Positions quad vertices and flips texture Y coordinate: `TexCoord = vec2(aTexCoord.x, 1.0 - aTexCoord.y)`.
@@ -306,7 +309,9 @@ sudo pacman -S --needed \
 |:---|:---|:---|
 | **Build (Debug)** | `cargo build` | Fast incremental compilation for development. |
 | **Build (Release)** | `cargo build --release` | Maximum optimizations (`opt-level = 3`, LTO, strip). |
-| **Run Unit Tests** | `cargo test` | Runs all 5 unit tests across `animation`, `brain`, and `state`. |
+| **Run All Tests (Release)** | `cargo test --release` | Runs all 34 tests with optimized WebP decoding (~11s). |
+| **Run All Tests (Debug)** | `cargo test` | Runs all unit and behavioral tests. |
+| **Run Behavioral Tests** | `cargo test rpc::behavior_tests -- --nocapture` | Runs RPC behavioral tests with live ANSI terminal frame visualizers. |
 | **Test Specific Module** | `cargo test state::emotion` | Isolates emotion registry and fallback test suite. |
 | **Lint Check** | `cargo clippy --all-targets` | Checks for idioms and anti-patterns. |
 | **Format Check** | `cargo fmt --check` | Enforces Rust formatting standards. |
@@ -394,6 +399,17 @@ If green fringes appear, kitten fur edges are overly cut, or video letterbox bor
 7. **NEVER Key Out Black Globally:**
    - Source animation frames often contain black letterbox lines at frame edges, but the pet's eyes, pupils, mouth, and fur contours contain pure black pixels (`RGB = 0, 0, 0`).
    - Never apply global black chroma-keying or luminance thresholding across the entire quad. Always bound border/black suppression strictly to frame edges (`minEdgeDist < 0.05`).
+8. **GLFW Single-Thread Test Serialization:**
+   - `PetWindow` and GLFW context functions are bound to a single thread. In multi-threaded `cargo test` runs, tests that initialize `PetWindow` must synchronize via a mutex (e.g., `TEST_HARNESS_LOCK: Mutex<()>`) or run sequentially to avoid GLFW context collision.
+9. **Threaded Event Pump Exit Guard (`client_handle.is_finished()`):**
+   - When a test pumps the main loop while driving an RPC client from a spawned thread, NEVER loop on a bare boolean flag (`while !is_done`). If an assertion panics in the client thread, the flag is never set, deadlocking the harness and starving locks.
+   - ALWAYS poll `while !client_handle.is_finished() { ... }`, drain remaining commands, and call `client_handle.join().unwrap()` to cleanly propagate panics.
+10. **Static Asset Caching in Test Suites (`LazyLock`):**
+    - Multi-frame WebP assets (`AnimationClip::load_from_webp`) are expensive to decode on CPU in debug builds.
+    - Never reload clips inside each individual test function; cache them statically using `std::sync::LazyLock` (`TEST_CLIPS`, `TEST_REGISTRY`).
+11. **JSON-RPC 2.0 Error Context Invariant (`data` vs `message`):**
+    - Under the JSON-RPC 2.0 protocol implementation, `RpcError::invalid_params` produces `"message": "Invalid params"`.
+    - Detailed context (e.g. `"Unknown emotion '...'. Available: [...]"`) is stored in the `"data"` field. Test assertions and API consumers must inspect `error["data"]` rather than `error["message"]`.
 
 ### Shell Tool Preferences
 When executing CLI commands or editing files, adhere to:
