@@ -2,10 +2,14 @@ pub mod handler;
 pub mod protocol;
 pub mod server;
 
+#[cfg(test)]
+pub mod behavior_tests;
+
 #[allow(unused_imports)]
 pub use handler::{
-    RpcCommand, execute_main_thread_command, extract_bool_param, extract_pos_params,
-    extract_string_param, handle_rpc_command,
+    RpcCommand, base64_decode, base64_encode, encode_png_rgb, encode_png_rgba,
+    execute_main_thread_command, extract_bool_param, extract_pos_params, extract_string_param,
+    handle_rpc_command,
 };
 #[allow(unused_imports)]
 pub use protocol::{RpcError, RpcId, RpcRequest, RpcResponse};
@@ -277,6 +281,70 @@ mod tests {
         assert!(response.starts_with("HTTP/1.1 200 OK"));
         assert!(response.contains("Access-Control-Allow-Origin: *"));
         assert!(response.contains("Access-Control-Allow-Methods: POST, GET, OPTIONS"));
+
+        server.shutdown();
+    }
+
+    #[test]
+    fn test_rpc_get_frame_dispatch() {
+        let registry = Arc::new(
+            EmotionRegistry::load_from_toml("assets/emotions.toml", "assets/animations")
+                .expect("Failed to load emotions"),
+        );
+
+        let server = RpcServer::start("127.0.0.1:0", registry, Box::new(NoopWakeNotifier))
+            .expect("Failed to bind RPC server");
+        let addr = server.local_addr();
+
+        let client_thread = std::thread::spawn(move || {
+            use std::io::{BufRead, BufReader, Write};
+            let mut stream = std::net::TcpStream::connect(addr).expect("Client connect failed");
+            stream
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+
+            let req = json!({
+                "jsonrpc": "2.0",
+                "method": "sparky.get_frame",
+                "params": {"source": "clip", "include_data": false},
+                "id": 55
+            });
+            writeln!(stream, "{}", req).expect("Write failed");
+
+            let mut reader = BufReader::new(stream);
+            let mut line = String::new();
+            reader.read_line(&mut line).expect("Read failed");
+            let resp: serde_json::Value = serde_json::from_str(line.trim()).unwrap();
+            resp
+        });
+
+        let cmd = server
+            .recv_command_timeout(Duration::from_secs(2))
+            .expect("Expected command on server");
+        assert_eq!(cmd.method, "sparky.get_frame");
+        assert_eq!(cmd.params["source"], "clip");
+        assert_eq!(cmd.params["include_data"], false);
+
+        if let Some(responder) = cmd.responder {
+            responder
+                .send(Ok(json!({
+                    "emotion": "sit",
+                    "clip": "sit",
+                    "frame_index": 0,
+                    "total_frames": 192,
+                    "width": 384,
+                    "height": 216,
+                    "channels": 3,
+                    "source": "clip",
+                    "format": "image/png"
+                })))
+                .unwrap();
+        }
+
+        let client_resp = client_thread.join().unwrap();
+        assert_eq!(client_resp["id"], 55);
+        assert_eq!(client_resp["result"]["format"], "image/png");
+        assert_eq!(client_resp["result"]["source"], "clip");
 
         server.shutdown();
     }

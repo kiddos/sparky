@@ -1,11 +1,14 @@
-use crate::animation::FramePacer;
+use crate::animation::{AnimationClip, FramePacer};
 use crate::brain::BrainEngine;
 use crate::render::PetWindow;
 use crate::rpc::protocol::RpcError;
 use crate::state::{EmotionRegistry, StateMachine};
 use crate::tray::TrayService;
 use crate::ui::ChatState;
+use image::codecs::png::PngEncoder;
+use image::{ExtendedColorType, ImageEncoder};
 use serde_json::json;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 /// Internal command dispatched to the main thread
@@ -13,6 +16,86 @@ pub struct RpcCommand {
     pub method: String,
     pub params: serde_json::Value,
     pub responder: Option<crossbeam_channel::Sender<Result<serde_json::Value, RpcError>>>,
+}
+
+/// Standard RFC 4648 Base64 encoder without external dependencies
+pub fn base64_encode(data: &[u8]) -> String {
+    const TABLE: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::with_capacity((data.len() + 2) / 3 * 4);
+    let chunks = data.chunks_exact(3);
+    let remainder = chunks.remainder();
+
+    for chunk in chunks {
+        let n = ((chunk[0] as u32) << 16) | ((chunk[1] as u32) << 8) | (chunk[2] as u32);
+        out.push(TABLE[((n >> 18) & 0x3F) as usize] as char);
+        out.push(TABLE[((n >> 12) & 0x3F) as usize] as char);
+        out.push(TABLE[((n >> 6) & 0x3F) as usize] as char);
+        out.push(TABLE[(n & 0x3F) as usize] as char);
+    }
+
+    match remainder.len() {
+        1 => {
+            let n = (remainder[0] as u32) << 16;
+            out.push(TABLE[((n >> 18) & 0x3F) as usize] as char);
+            out.push(TABLE[((n >> 12) & 0x3F) as usize] as char);
+            out.push('=');
+            out.push('=');
+        }
+        2 => {
+            let n = ((remainder[0] as u32) << 16) | ((remainder[1] as u32) << 8);
+            out.push(TABLE[((n >> 18) & 0x3F) as usize] as char);
+            out.push(TABLE[((n >> 12) & 0x3F) as usize] as char);
+            out.push(TABLE[((n >> 6) & 0x3F) as usize] as char);
+            out.push('=');
+        }
+        _ => {}
+    }
+
+    out
+}
+
+/// Standard RFC 4648 Base64 decoder without external dependencies
+#[allow(dead_code)]
+pub fn base64_decode(input: &str) -> anyhow::Result<Vec<u8>> {
+    let mut out = Vec::with_capacity(input.len() * 3 / 4);
+    let mut buf: u32 = 0;
+    let mut bits: u32 = 0;
+    for &b in input.as_bytes() {
+        if b == b'=' || b.is_ascii_whitespace() {
+            continue;
+        }
+        let val = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            _ => anyhow::bail!("Invalid base64 character: {}", b as char),
+        } as u32;
+        buf = (buf << 6) | val;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((buf >> bits) as u8);
+        }
+    }
+    Ok(out)
+}
+
+/// Encodes raw RGBA pixel buffer to standard PNG bytes
+pub fn encode_png_rgba(width: u32, height: u32, rgba_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let encoder = PngEncoder::new(&mut buf);
+    encoder.write_image(rgba_data, width, height, ExtendedColorType::Rgba8)?;
+    Ok(buf)
+}
+
+/// Encodes raw RGB pixel buffer to standard PNG bytes
+pub fn encode_png_rgb(width: u32, height: u32, rgb_data: &[u8]) -> anyhow::Result<Vec<u8>> {
+    let mut buf = Vec::new();
+    let encoder = PngEncoder::new(&mut buf);
+    encoder.write_image(rgb_data, width, height, ExtendedColorType::Rgb8)?;
+    Ok(buf)
 }
 
 /// Helper to extract a string parameter from either named fields, positional array, or a bare string
@@ -82,6 +165,12 @@ pub fn is_main_thread_method(method: &str) -> bool {
             | "sparky.get_status"
             | "sparky_getStatus"
             | "sparky_getState"
+            | "sparky.get_frame"
+            | "get_frame"
+            | "sparky.get_display_frame"
+            | "get_display_frame"
+            | "sparky_getFrame"
+            | "sparky_getDisplayFrame"
             | "sparky.set_emotion"
             | "set_emotion"
             | "sparky_setEmotion"
@@ -170,6 +259,17 @@ pub fn discover_rpc_methods() -> serde_json::Value {
                 "description": "Returns full desktop pet state including current emotion, active clip, window position and visibility, and chat status",
                 "params": [],
                 "result": { "description": "Current state object" }
+            },
+            {
+                "name": "sparky.get_frame",
+                "aliases": ["get_frame", "get_display_frame", "sparky.get_display_frame", "sparky_getFrame", "sparky_getDisplayFrame"],
+                "description": "Captures the current display frame (from rendered window framebuffer or animation clip) as PNG with metadata and base64 encoding",
+                "params": [
+                    { "name": "source", "description": "'framebuffer' (rendered window) or 'clip' (source animation frame)", "required": false, "schema": { "type": "string" } },
+                    { "name": "include_data", "description": "Whether to include base64 PNG data in the response (default true)", "required": false, "schema": { "type": "boolean" } },
+                    { "name": "save_path", "description": "Optional file path to write PNG image directly to disk", "required": false, "schema": { "type": "string" } }
+                ],
+                "result": { "description": "Frame metadata, dimensions, clip/emotion status, and base64 PNG" }
             },
             {
                 "name": "sparky.set_emotion",
@@ -313,6 +413,7 @@ pub fn execute_main_thread_command(
     tray_service: &Option<TrayService>,
     frame_pacer: &mut FramePacer,
     is_visible: &mut bool,
+    clips: &HashMap<String, AnimationClip>,
 ) -> Result<serde_json::Value, RpcError> {
     match method {
         "sparky.get_state" | "get_state" | "get_status" | "sparky.get_status"
@@ -338,6 +439,108 @@ pub fn execute_main_thread_command(
                 },
                 "fps": frame_pacer.target_fps(),
             }))
+        }
+        "sparky.get_frame"
+        | "get_frame"
+        | "sparky.get_display_frame"
+        | "get_display_frame"
+        | "sparky_getFrame"
+        | "sparky_getDisplayFrame" => {
+            let requested_source = extract_string_param(params, &["source"])
+                .unwrap_or_else(|| "framebuffer".to_string());
+            let include_data = extract_bool_param(params, &["include_data"]).unwrap_or(true);
+            let save_path = extract_string_param(params, &["save_path", "path", "file"]);
+
+            let active_clip_name = &state_machine.active_clip_name;
+            let frame_idx = frame_pacer.current_index();
+            let total_frames = clips
+                .get(active_clip_name)
+                .map(|c| c.frames.len())
+                .unwrap_or(0);
+
+            let (width, height, channels, png_bytes, actual_source) =
+                if requested_source == "clip" || !*is_visible {
+                    if let Some(clip) = clips.get(active_clip_name) {
+                        if let Some(frame) = clip.frames.get(frame_idx) {
+                            let png = encode_png_rgb(frame.width, frame.height, &frame.rgb_data)
+                                .map_err(|e| {
+                                    RpcError::internal(format!("PNG encoding error: {}", e))
+                                })?;
+                            (frame.width, frame.height, 3, png, "clip".to_string())
+                        } else {
+                            return Err(RpcError::internal(format!(
+                                "Frame index {} out of bounds for clip '{}' (total frames: {})",
+                                frame_idx,
+                                active_clip_name,
+                                clip.frames.len()
+                            )));
+                        }
+                    } else {
+                        return Err(RpcError::internal(format!(
+                            "Active clip '{}' not found in loaded clips",
+                            active_clip_name
+                        )));
+                    }
+                } else {
+                    let (fb_w, fb_h) = pet_window.window.get_framebuffer_size();
+                    if fb_w <= 0 || fb_h <= 0 {
+                        return Err(RpcError::internal("Invalid framebuffer dimensions"));
+                    }
+                    let w = fb_w as u32;
+                    let h = fb_h as u32;
+                    let mut pixels = vec![0u8; (w * h * 4) as usize];
+                    unsafe {
+                        gl::PixelStorei(gl::PACK_ALIGNMENT, 1);
+                        gl::ReadPixels(
+                            0,
+                            0,
+                            fb_w,
+                            fb_h,
+                            gl::RGBA,
+                            gl::UNSIGNED_BYTE,
+                            pixels.as_mut_ptr() as *mut _,
+                        );
+                    }
+                    let stride = (w * 4) as usize;
+                    let mut flipped = vec![0u8; pixels.len()];
+                    for y in 0..h as usize {
+                        let src_row = (h as usize - 1 - y) * stride;
+                        let dst_row = y * stride;
+                        flipped[dst_row..dst_row + stride]
+                            .copy_from_slice(&pixels[src_row..src_row + stride]);
+                    }
+                    let png = encode_png_rgba(w, h, &flipped)
+                        .map_err(|e| RpcError::internal(format!("PNG encoding error: {}", e)))?;
+                    (w, h, 4, png, "framebuffer".to_string())
+                };
+
+            let mut result = json!({
+                "emotion": state_machine.current_emotion,
+                "clip": active_clip_name,
+                "frame_index": frame_idx,
+                "total_frames": total_frames,
+                "width": width,
+                "height": height,
+                "channels": channels,
+                "source": actual_source,
+                "format": "image/png",
+                "byte_size": png_bytes.len(),
+            });
+
+            if let Some(ref path) = save_path {
+                std::fs::write(path, &png_bytes).map_err(|e| {
+                    RpcError::internal(format!("Failed to save frame to '{}': {}", path, e))
+                })?;
+                result["saved_to"] = json!(path);
+            }
+
+            if include_data {
+                let b64 = base64_encode(&png_bytes);
+                result["data_url"] = json!(format!("data:image/png;base64,{}", b64));
+                result["base64"] = json!(b64);
+            }
+
+            Ok(result)
         }
         "sparky.set_emotion" | "set_emotion" | "sparky_setEmotion" => {
             let emotion_id =
@@ -498,6 +701,7 @@ pub fn handle_rpc_command(
     tray_service: &Option<TrayService>,
     frame_pacer: &mut FramePacer,
     is_visible: &mut bool,
+    clips: &HashMap<String, AnimationClip>,
 ) {
     let result = execute_main_thread_command(
         &cmd.method,
@@ -510,6 +714,7 @@ pub fn handle_rpc_command(
         tray_service,
         frame_pacer,
         is_visible,
+        clips,
     );
 
     if let Some(responder) = cmd.responder {
@@ -586,8 +791,55 @@ mod tests {
         assert_eq!(discovery["openrpc"], "1.3.2");
         let methods = discovery["methods"].as_array().expect("Methods array");
         assert!(methods.iter().any(|m| m["name"] == "sparky.get_state"));
+        assert!(methods.iter().any(|m| m["name"] == "sparky.get_frame"));
         assert!(methods.iter().any(|m| m["name"] == "sparky.set_emotion"));
         assert!(methods.iter().any(|m| m["name"] == "sparky.send_chat"));
         assert!(methods.iter().any(|m| m["name"] == "sparky.pet"));
+    }
+
+    #[test]
+    fn test_base64_encode() {
+        assert_eq!(base64_encode(b""), "");
+        assert_eq!(base64_encode(b"f"), "Zg==");
+        assert_eq!(base64_encode(b"fo"), "Zm8=");
+        assert_eq!(base64_encode(b"foo"), "Zm9v");
+        assert_eq!(base64_encode(b"foob"), "Zm9vYg==");
+        assert_eq!(base64_encode(b"fooba"), "Zm9vYmE=");
+        assert_eq!(base64_encode(b"foobar"), "Zm9vYmFy");
+
+        // Decode roundtrip
+        for sample in &[
+            b"".as_slice(),
+            b"f",
+            b"fo",
+            b"foo",
+            b"foob",
+            b"hello world 123!",
+        ] {
+            let encoded = base64_encode(sample);
+            let decoded = base64_decode(&encoded).expect("Decode should succeed");
+            assert_eq!(&decoded[..], *sample);
+        }
+    }
+
+    #[test]
+    fn test_encode_png() {
+        // 2x2 RGB image
+        let rgb_pixels = vec![255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255];
+        let png = encode_png_rgb(2, 2, &rgb_pixels).expect("Encode RGB PNG");
+        assert_eq!(
+            &png[0..8],
+            &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+        );
+
+        // 2x2 RGBA image
+        let rgba_pixels = vec![
+            255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 128,
+        ];
+        let png_rgba = encode_png_rgba(2, 2, &rgba_pixels).expect("Encode RGBA PNG");
+        assert_eq!(
+            &png_rgba[0..8],
+            &[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A]
+        );
     }
 }
