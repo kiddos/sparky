@@ -17,6 +17,7 @@ pub struct PetWindow {
     pub is_dragging: bool,
     pub drag_start_cursor: (f64, f64),
     pub drag_start_pos: (i32, i32),
+    pub current_pos: (i32, i32),
     pub is_click_through: bool,
 }
 
@@ -92,8 +93,18 @@ impl PetWindow {
             is_dragging: false,
             drag_start_cursor: (0.0, 0.0),
             drag_start_pos: (initial_x, initial_y),
+            current_pos: (initial_x, initial_y),
             is_click_through: false,
         })
+    }
+
+    pub fn set_pos(&mut self, x: i32, y: i32) {
+        self.current_pos = (x, y);
+        self.window.set_pos(x, y);
+    }
+
+    pub fn get_pos(&self) -> (i32, i32) {
+        self.window.get_pos()
     }
 
     pub fn handle_mouse_drag(&mut self, event: &WindowEvent) {
@@ -104,7 +115,7 @@ impl PetWindow {
         match event {
             WindowEvent::MouseButton(glfw::MouseButton::Button1, Action::Press, _) => {
                 let (cx, cy) = self.window.get_cursor_pos();
-                let (wx, wy) = self.window.get_pos();
+                let (wx, wy) = self.current_pos;
                 self.is_dragging = true;
                 self.drag_start_cursor = (cx, cy);
                 self.drag_start_pos = (wx, wy);
@@ -112,12 +123,28 @@ impl PetWindow {
             WindowEvent::MouseButton(glfw::MouseButton::Button1, Action::Release, _) => {
                 self.is_dragging = false;
             }
-            WindowEvent::CursorPos(cx, cy) => {
-                if self.is_dragging {
-                    let dx = (cx - self.drag_start_cursor.0) as i32;
-                    let dy = (cy - self.drag_start_cursor.1) as i32;
-                    self.window
-                        .set_pos(self.drag_start_pos.0 + dx, self.drag_start_pos.1 + dy);
+            WindowEvent::Focus(false) => {
+                self.is_dragging = false;
+            }
+            WindowEvent::Pos(x, y) => {
+                self.current_pos = (*x, *y);
+            }
+            WindowEvent::CursorPos(cx, cy) if self.is_dragging => {
+                // Correct the window-relative cursor position by adding back
+                // the window's accumulated displacement since drag start.
+                // When the window moves under the cursor, (cx, cy) shifts by the same amount,
+                // which previously caused a jittery feedback loop resetting to drag_start_pos.
+                let actual_cx = cx + (self.current_pos.0 - self.drag_start_pos.0) as f64;
+                let actual_cy = cy + (self.current_pos.1 - self.drag_start_pos.1) as f64;
+
+                let dx = (actual_cx - self.drag_start_cursor.0) as i32;
+                let dy = (actual_cy - self.drag_start_cursor.1) as i32;
+
+                let target_x = self.drag_start_pos.0 + dx;
+                let target_y = self.drag_start_pos.1 + dy;
+
+                if target_x != self.current_pos.0 || target_y != self.current_pos.1 {
+                    self.set_pos(target_x, target_y);
                 }
             }
             _ => {}
@@ -127,5 +154,110 @@ impl PetWindow {
     pub fn set_click_through(&mut self, enabled: bool) {
         self.is_click_through = enabled;
         log::info!("Click-through mode set to: {}", enabled);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_mouse_drag_lifecycle_and_jitter_prevention() {
+        let mut pet_window = PetWindow::new(288, 162, "TestSparky").unwrap();
+
+        // 1. Initial state
+        assert!(!pet_window.is_dragging);
+        let start_pos = pet_window.current_pos;
+
+        // 2. Press triggers drag
+        pet_window.handle_mouse_drag(&WindowEvent::MouseButton(
+            glfw::MouseButton::Button1,
+            Action::Press,
+            glfw::Modifiers::empty(),
+        ));
+        assert!(pet_window.is_dragging);
+
+        // 3. Focus loss cancels drag
+        pet_window.handle_mouse_drag(&WindowEvent::Focus(false));
+        assert!(!pet_window.is_dragging);
+
+        // 4. Release cancels drag
+        pet_window.handle_mouse_drag(&WindowEvent::MouseButton(
+            glfw::MouseButton::Button1,
+            Action::Press,
+            glfw::Modifiers::empty(),
+        ));
+        assert!(pet_window.is_dragging);
+        pet_window.handle_mouse_drag(&WindowEvent::MouseButton(
+            glfw::MouseButton::Button1,
+            Action::Release,
+            glfw::Modifiers::empty(),
+        ));
+        assert!(!pet_window.is_dragging);
+
+        // 5. Click-through disables dragging
+        pet_window.set_click_through(true);
+        pet_window.handle_mouse_drag(&WindowEvent::MouseButton(
+            glfw::MouseButton::Button1,
+            Action::Press,
+            glfw::Modifiers::empty(),
+        ));
+        assert!(!pet_window.is_dragging);
+        pet_window.set_click_through(false);
+
+        // 6. set_pos updates current_pos immediately
+        pet_window.set_pos(start_pos.0 + 50, start_pos.1 + 30);
+        assert_eq!(pet_window.current_pos, (start_pos.0 + 50, start_pos.1 + 30));
+
+        // 7. Jitter prevention: simulate cursor movement and compensating event
+        pet_window.set_pos(200, 200);
+        pet_window.handle_mouse_drag(&WindowEvent::MouseButton(
+            glfw::MouseButton::Button1,
+            Action::Press,
+            glfw::Modifiers::empty(),
+        ));
+        assert!(pet_window.is_dragging);
+        let (start_cx, start_cy) = pet_window.drag_start_cursor;
+        let pos_before_move = pet_window.current_pos;
+
+        // Simulate mouse move: cursor moved by (+20, +10)
+        pet_window.handle_mouse_drag(&WindowEvent::CursorPos(start_cx + 20.0, start_cy + 10.0));
+        let moved_pos = pet_window.current_pos;
+        assert_eq!(moved_pos, (pos_before_move.0 + 20, pos_before_move.1 + 10));
+
+        // When the window moves under the mouse, compensating relative CursorPos event arrives
+        // where cursor is back at (start_cx, start_cy) relative to the new window.
+        // It MUST NOT snap back to pos_before_move!
+        pet_window.handle_mouse_drag(&WindowEvent::CursorPos(start_cx, start_cy));
+        assert_eq!(
+            pet_window.current_pos, moved_pos,
+            "Window must remain at moved_pos and not snap back"
+        );
+
+        // Move 2: further +15, +5 (relative cursor becomes start_cx + 15, start_cy + 5)
+        pet_window.handle_mouse_drag(&WindowEvent::CursorPos(start_cx + 15.0, start_cy + 5.0));
+        let moved_pos2 = pet_window.current_pos;
+        assert_eq!(moved_pos2, (pos_before_move.0 + 35, pos_before_move.1 + 15));
+
+        // Compensating event arrives for Move 2
+        pet_window.handle_mouse_drag(&WindowEvent::CursorPos(start_cx, start_cy));
+        assert_eq!(pet_window.current_pos, moved_pos2);
+
+        // Move 3: drag backwards -10, -5
+        pet_window.handle_mouse_drag(&WindowEvent::CursorPos(start_cx - 10.0, start_cy - 5.0));
+        let moved_pos3 = pet_window.current_pos;
+        assert_eq!(moved_pos3, (pos_before_move.0 + 25, pos_before_move.1 + 10));
+
+        // Compensating event arrives for Move 3
+        pet_window.handle_mouse_drag(&WindowEvent::CursorPos(start_cx, start_cy));
+        assert_eq!(pet_window.current_pos, moved_pos3);
+
+        // Release drag
+        pet_window.handle_mouse_drag(&WindowEvent::MouseButton(
+            glfw::MouseButton::Button1,
+            Action::Release,
+            glfw::Modifiers::empty(),
+        ));
+        assert!(!pet_window.is_dragging);
     }
 }

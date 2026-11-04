@@ -197,8 +197,10 @@ fn main() -> Result<()> {
 
     // Main Event Loop
     while !pet_window.window.should_close() {
-        // Sleep until next frame to preserve CPU
-        let timeout = if is_visible {
+        // Sleep until next frame to preserve CPU; if actively dragging, use short timeout for smooth tracking
+        let timeout = if pet_window.is_dragging {
+            0.005 // 5ms for smooth dragging
+        } else if is_visible {
             frame_pacer.time_until_next_frame().as_secs_f64()
         } else {
             0.1 // Deep sleep when hidden in tray
@@ -231,18 +233,18 @@ fn main() -> Result<()> {
 
         // Adjust window size dynamically when chat is toggled
         if chat_state.is_visible != was_chat_visible {
-            let (wx, wy) = pet_window.window.get_pos();
+            let (wx, wy) = pet_window.get_pos();
             if chat_state.is_visible {
                 pet_window
                     .window
                     .set_size(BASE_WIDTH as i32, EXPANDED_HEIGHT as i32);
-                pet_window.window.set_pos(wx, wy - CHAT_EXTRA_HEIGHT as i32);
+                pet_window.set_pos(wx, wy - CHAT_EXTRA_HEIGHT as i32);
                 pet_window.height = EXPANDED_HEIGHT;
             } else {
                 pet_window
                     .window
                     .set_size(BASE_WIDTH as i32, BASE_HEIGHT as i32);
-                pet_window.window.set_pos(wx, wy + CHAT_EXTRA_HEIGHT as i32);
+                pet_window.set_pos(wx, wy + CHAT_EXTRA_HEIGHT as i32);
                 pet_window.height = BASE_HEIGHT;
             }
             let (nfb_w, _) = pet_window.window.get_framebuffer_size();
@@ -261,7 +263,8 @@ fn main() -> Result<()> {
         for (_, event) in events {
             egui_gl_glfw::handle_event(event.clone(), &mut egui_input_state);
 
-            let pointer_captured_by_egui = chat_state.is_visible && egui_ctx.wants_pointer_input();
+            let pointer_captured_by_egui =
+                !pet_window.is_dragging && chat_state.is_visible && egui_ctx.wants_pointer_input();
             if !pointer_captured_by_egui {
                 pet_window.handle_mouse_drag(&event);
                 state_machine.touch_interaction();

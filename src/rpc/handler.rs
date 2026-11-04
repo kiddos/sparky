@@ -601,11 +601,11 @@ pub fn execute_main_thread_command(
                 RpcError::invalid_params("Missing or invalid coordinates. Provide {x, y} or [x, y]")
             })?;
 
-            pet_window.window.set_pos(x, y);
+            pet_window.set_pos(x, y);
             Ok(json!({ "success": true, "x": x, "y": y }))
         }
         "sparky.get_position" => {
-            let (x, y) = pet_window.window.get_pos();
+            let (x, y) = pet_window.get_pos();
             Ok(json!({ "x": x, "y": y }))
         }
         "sparky.quit" => {
