@@ -7,6 +7,7 @@ pub struct ChatState {
     pub messages: Vec<(String, String)>, // (sender, message)
     pub is_generating: bool,
     pub current_emotion_id: String,
+    pub focus_input: bool,
 }
 
 impl Default for ChatState {
@@ -26,6 +27,7 @@ impl ChatState {
             )],
             is_generating: false,
             current_emotion_id: "sit".to_string(),
+            focus_input: true,
         }
     }
 
@@ -121,8 +123,13 @@ impl ChatState {
                                 .desired_width(text_width),
                         );
 
+                        if self.focus_input && !self.is_generating {
+                            response.request_focus();
+                            self.focus_input = false;
+                        }
+
                         let enter_pressed =
-                            response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter));
+                            !self.is_generating && ui.input(|i| i.key_pressed(egui::Key::Enter));
 
                         let send_clicked = ui
                             .add_enabled(!self.is_generating, egui::Button::new("Send"))
@@ -135,10 +142,78 @@ impl ChatState {
                             self.messages.push(("Sparky".to_string(), String::new()));
                             self.current_input.clear();
                             self.is_generating = true;
+                            self.focus_input = true;
                             on_send(&input);
                         }
                     });
                 });
             });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_chat_state_enter_key_submits_message() {
+        let mut chat_state = ChatState::new();
+        chat_state.is_visible = true;
+        chat_state.current_input = "Hello Sparky".to_string();
+
+        let registry =
+            EmotionRegistry::load_from_toml("assets/emotions.toml", "assets/animations").unwrap();
+
+        let ctx = Context::default();
+        let mut sent_prompt = None;
+
+        // Frame 1: TextEdit is rendered and automatically requests focus
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(
+                    egui::Pos2::ZERO,
+                    egui::vec2(288.0, 466.0),
+                )),
+                ..Default::default()
+            },
+            |ctx| {
+                chat_state.draw(
+                    ctx,
+                    &registry,
+                    |p| sent_prompt = Some(p.to_string()),
+                    |_| {},
+                );
+            },
+        );
+
+        // Frame 2: User presses Enter key to send
+        let mut enter_input = egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(
+                egui::Pos2::ZERO,
+                egui::vec2(288.0, 466.0),
+            )),
+            ..Default::default()
+        };
+        enter_input.events.push(egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            modifiers: egui::Modifiers::default(),
+            repeat: false,
+        });
+
+        let _ = ctx.run(enter_input, |ctx| {
+            chat_state.draw(
+                ctx,
+                &registry,
+                |p| sent_prompt = Some(p.to_string()),
+                |_| {},
+            );
+        });
+
+        assert_eq!(sent_prompt.as_deref(), Some("Hello Sparky"));
+        assert_eq!(chat_state.current_input, "");
+        assert!(chat_state.is_generating);
+        assert!(chat_state.focus_input);
     }
 }

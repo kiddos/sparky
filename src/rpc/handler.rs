@@ -594,6 +594,9 @@ pub fn execute_main_thread_command(
                 })?;
 
             chat_state.is_visible = visible;
+            if visible {
+                chat_state.focus_input = true;
+            }
             Ok(json!({ "success": true, "chat_visible": visible }))
         }
         "sparky.set_position" => {

@@ -240,6 +240,7 @@ fn main() -> Result<()> {
                     .set_size(BASE_WIDTH as i32, EXPANDED_HEIGHT as i32);
                 pet_window.set_pos(wx, wy - CHAT_EXTRA_HEIGHT as i32);
                 pet_window.height = EXPANDED_HEIGHT;
+                chat_state.focus_input = true;
             } else {
                 pet_window
                     .window
@@ -247,10 +248,11 @@ fn main() -> Result<()> {
                 pet_window.set_pos(wx, wy + CHAT_EXTRA_HEIGHT as i32);
                 pet_window.height = BASE_HEIGHT;
             }
-            let (nfb_w, _) = pet_window.window.get_framebuffer_size();
+            let (nfb_w, nfb_h) = pet_window.window.get_framebuffer_size();
             let (nwin_w, nwin_h) = pet_window.window.get_size();
             let ppp = nfb_w as f32 / nwin_w as f32;
             egui_input_state.pixels_per_point = ppp;
+            painter.set_size(nfb_w as u32, nfb_h as u32);
             egui_input_state.input.screen_rect = Some(egui::Rect::from_min_size(
                 egui::Pos2::ZERO,
                 egui::vec2(nwin_w as f32, nwin_h as f32),
@@ -278,11 +280,39 @@ fn main() -> Result<()> {
                 ) => {
                     chat_state.is_visible = !chat_state.is_visible;
                 }
-                glfw::WindowEvent::FramebufferSize(w, _) => {
-                    let (win_w, _) = pet_window.window.get_size();
+                glfw::WindowEvent::FramebufferSize(w, h) => {
+                    let (win_w, win_h) = pet_window.window.get_size();
                     if win_w > 0 {
                         egui_input_state.pixels_per_point = w as f32 / win_w as f32;
                     }
+                    painter.set_size(w as u32, h as u32);
+                    egui_input_state.input.screen_rect = Some(egui::Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        egui::vec2(win_w as f32, win_h as f32),
+                    ));
+                }
+                glfw::WindowEvent::Key(
+                    glfw::Key::KpEnter,
+                    _,
+                    glfw::Action::Press | glfw::Action::Repeat,
+                    _,
+                ) => {
+                    egui_input_state.input.events.push(egui::Event::Key {
+                        key: egui::Key::Enter,
+                        physical_key: None,
+                        pressed: true,
+                        modifiers: egui_input_state.modifiers,
+                        repeat: false,
+                    });
+                }
+                glfw::WindowEvent::Key(glfw::Key::KpEnter, _, glfw::Action::Release, _) => {
+                    egui_input_state.input.events.push(egui::Event::Key {
+                        key: egui::Key::Enter,
+                        physical_key: None,
+                        pressed: false,
+                        modifiers: egui_input_state.modifiers,
+                        repeat: false,
+                    });
                 }
                 _ => {}
             }
@@ -328,6 +358,7 @@ fn main() -> Result<()> {
                     action_tag,
                 } => {
                     chat_state.is_generating = false;
+                    chat_state.focus_input = true;
                     if let Some(tag) = action_tag {
                         state_machine.transition_to(&tag, &emotion_registry);
                         chat_state.current_emotion_id = tag;
@@ -336,6 +367,7 @@ fn main() -> Result<()> {
                 }
                 brain::BrainResponse::Error(err) => {
                     chat_state.is_generating = false;
+                    chat_state.focus_input = true;
                     chat_state
                         .messages
                         .push(("System".to_string(), format!("Error: {}", err)));
@@ -388,6 +420,17 @@ fn main() -> Result<()> {
 
                 // Render Egui Chat UI if visible
                 if chat_state.is_visible {
+                    let (curr_fb_w, curr_fb_h) = pet_window.window.get_framebuffer_size();
+                    let (curr_win_w, curr_win_h) = pet_window.window.get_size();
+                    if curr_win_w > 0 && curr_win_h > 0 {
+                        let ppp = curr_fb_w as f32 / curr_win_w as f32;
+                        egui_input_state.pixels_per_point = ppp;
+                        painter.set_size(curr_fb_w as u32, curr_fb_h as u32);
+                        egui_input_state.input.screen_rect = Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(curr_win_w as f32, curr_win_h as f32),
+                        ));
+                    }
                     let raw_input = egui_input_state.input.take();
                     let mut triggered_emotion: Option<String> = None;
 
