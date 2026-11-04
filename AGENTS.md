@@ -180,7 +180,7 @@ sparky/
   - Extracts and strips `<action>([a-z0-9_-]+)</action>` tags from model output to trigger state transitions without displaying raw tags in dialogue.
 
 #### 4. [`src/render/`](file:///home/kiddos/projects/tools/sparky/src/render/mod.rs)
-- [`mod.rs`](file:///home/kiddos/projects/tools/sparky/src/render/mod.rs): Configures GLFW window hints for borderless (`Decorated(false)`), floating (`Floating(true)`), transparent (`TransparentFramebuffer(true)`), unresizable (`Resizable(false)`) rendering. Handles mouse dragging and click-through mode.
+- [`mod.rs`](file:///home/kiddos/projects/tools/sparky/src/render/mod.rs): Configures GLFW window hints for borderless (`Decorated(false)`), floating (`Floating(true)`), transparent (`TransparentFramebuffer(true)`), unresizable (`Resizable(false)`) rendering. Implements displacement-compensated, jitter-free mouse dragging tracking `current_pos`, synchronized `set_pos` / `get_pos`, focus-loss drag cancellation, and click-through mode.
 - [`quad.rs`](file:///home/kiddos/projects/tools/sparky/src/render/quad.rs): Allocates VAO/VBO for a full-quad `TRIANGLE_STRIP` ($[-1, 1]$ coordinate space) and manages the OpenGL texture unit (`GL_TEXTURE0`).
 - [`shader.rs`](file:///home/kiddos/projects/tools/sparky/src/render/shader.rs): Compiles vertex and fragment shaders from disk, links the OpenGL program, and exposes type-safe uniform setters (`set_vec3`, `set_float`, `set_int`).
 
@@ -410,6 +410,45 @@ If green fringes appear, kitten fur edges are overly cut, or video letterbox bor
 11. **JSON-RPC 2.0 Error Context Invariant (`data` vs `message`):**
     - Under the JSON-RPC 2.0 protocol implementation, `RpcError::invalid_params` produces `"message": "Invalid params"`.
     - Detailed context (e.g. `"Unknown emotion '...'. Available: [...]"`) is stored in the `"data"` field. Test assertions and API consumers must inspect `error["data"]` rather than `error["message"]`.
+12. **Window-Relative Cursor Drag Compensation (Anti-Jitter Invariant):**
+    - GLFW's `WindowEvent::CursorPos(cx, cy)` supplies coordinates relative to the window's content area, NOT global screen coordinates.
+    - Physically moving the window shifts the client area under the pointer, which alters `(cx, cy)` for subsequent events.
+    - **Bad (Jitter Loop):**
+      ```rust
+      let dx = (cx - self.drag_start_cursor.0) as i32;
+      self.window.set_pos(self.drag_start_pos.0 + dx, self.drag_start_pos.1 + dy);
+      ```
+      *Failure Mode:* Moving the window by $+10\text{ px}$ causes the next relative cursor position `cx` to drop back by $-10\text{ px}$, resulting in `dx = 0` and snapping the window back to `drag_start_pos` every frame.
+    - **Good (Displacement-Compensated Invariant):**
+      ```rust
+      let actual_cx = cx + (self.current_pos.0 - self.drag_start_pos.0) as f64;
+      let actual_cy = cy + (self.current_pos.1 - self.drag_start_pos.1) as f64;
+      let dx = (actual_cx - self.drag_start_cursor.0) as i32;
+      let dy = (actual_cy - self.drag_start_cursor.1) as i32;
+      let target_x = self.drag_start_pos.0 + dx;
+      let target_y = self.drag_start_pos.1 + dy;
+      if target_x != self.current_pos.0 || target_y != self.current_pos.1 {
+          self.set_pos(target_x, target_y);
+      }
+      ```
+      *Invariant:* Adding the accumulated displacement `(current_pos - drag_start_pos)` mathematically reconstructs the invariant screen-space displacement `current_screen_cursor - initial_screen_cursor`.
+    - **Drag Event Loop Pacing:**
+      - During active dragging (`pet_window.is_dragging == true`), lower `glfw.wait_events_timeout()` to $5\text{ ms}$ (~$200\text{ Hz}$) for fluid cursor tracking.
+      - Return to `frame_pacer.time_until_next_frame()` ($24\text{ FPS}$) when not dragging to strictly maintain the $\le 0.3\%$ idle CPU budget.
+    - **Drag Gesture Isolation:**
+      - Never allow UI overlays to cancel an in-flight window drag:  
+        `let pointer_captured_by_egui = !pet_window.is_dragging && chat_state.is_visible && egui_ctx.wants_pointer_input();`
+13. **Visual Verification & Screen Inspection Invariant (`sparky.get_frame`):**
+    - Never attempt to run external X11/Wayland screen capture commands (`import -window root`, `scrot`, `xwd`, `maim`).
+    - Use the built-in JSON-RPC method `sparky.get_frame` with `source: "framebuffer"`, saving to disk via `save_path`.
+    - Once written to disk, call `read_file` on the PNG path to inspect and analyze the rendered frame directly within the agent context.
+    - Capturing from `source: "framebuffer"` captures the exact composited result (`gl::ReadPixels`), including transparent alpha blending, chroma despill, and the egui chat overlay.
+14. **Dual-Viewport & Dynamic Window Expansion Invariant:**
+    - Base pet dimensions: $288 \times 162\text{ px}$. Expanded chat dimensions: $288 \times 466\text{ px}$ (`BASE_HEIGHT + CHAT_EXTRA_HEIGHT`).
+    - Whenever the window size changes (`chat_state.is_visible` toggle or `WindowEvent::FramebufferSize`):
+      1. `painter.set_size(nfb_w, nfb_h)` must be called on `egui_gl_glfw::Painter` to update its projection uniform `u_screen_size` and viewport/scissor math.
+      2. `egui_input_state.input.screen_rect` must be set to `Rect::from_min_size(Pos2::ZERO, vec2(win_w, win_h))`.
+    - Failure to update `painter.set_size` will cause egui to render using the initial $162\text{px}$ canvas height, resulting in squashed fonts, truncated UI elements, and inaccessible text inputs.
 
 ### Shell Tool Preferences
 When executing CLI commands or editing files, adhere to:
