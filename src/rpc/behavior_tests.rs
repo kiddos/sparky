@@ -110,6 +110,14 @@ impl RpcTestClient {
         self.call_success("sparky.poke", json!({}))
     }
 
+    pub fn complete_animation(&mut self) -> serde_json::Value {
+        self.call_success("sparky.complete_animation", json!({}))
+    }
+
+    pub fn clear_queue(&mut self) -> serde_json::Value {
+        self.call_success("sparky.clear_queue", json!({}))
+    }
+
     pub fn get_frame(
         &mut self,
         source: &str,
@@ -456,6 +464,17 @@ fn test_pet_behavior_petting_triggers_happy_and_visual_change() {
         let pet_res = client.pet();
         assert_eq!(pet_res["success"], true);
         assert_eq!(pet_res["emotion"], "happy");
+        assert_eq!(pet_res["queued"], true);
+
+        // Before animation completes, pet is still in sit emotion and happy is queued
+        let pre_state = client.get_state();
+        assert_eq!(pre_state["emotion"], "sit");
+        assert_eq!(pre_state["queue"][0], "happy");
+
+        // Complete current animation to consume queue
+        let comp_res = client.complete_animation();
+        assert_eq!(comp_res["transitioned"], true);
+        assert_eq!(comp_res["emotion"], "happy");
 
         // 2. State verification
         let state = client.get_state();
@@ -500,6 +519,17 @@ fn test_pet_behavior_poking_triggers_angry_and_visual_change() {
         let poke_res = client.poke();
         assert_eq!(poke_res["success"], true);
         assert_eq!(poke_res["emotion"], "angry");
+        assert_eq!(poke_res["queued"], true);
+
+        // Before animation completes, pet is still in sit emotion and angry is queued
+        let pre_state = client.get_state();
+        assert_eq!(pre_state["emotion"], "sit");
+        assert_eq!(pre_state["queue"][0], "angry");
+
+        // Complete current animation to consume queue
+        let comp_res = client.complete_animation();
+        assert_eq!(comp_res["transitioned"], true);
+        assert_eq!(comp_res["emotion"], "angry");
 
         // 2. State verification
         let state = client.get_state();
@@ -534,11 +564,22 @@ fn test_pet_behavior_poking_triggers_angry_and_visual_change() {
 #[test]
 fn test_pet_behavior_naughty_transition_and_visual_frame() {
     run_desktop_pet_rpc_test(|client, out_dir| {
-        // 1. Transition to naughty
+        // 1. Queue naughty
         let naughty_res = client.set_emotion("naughty");
         assert_eq!(naughty_res["success"], true);
         assert_eq!(naughty_res["emotion"], "naughty");
         assert_eq!(naughty_res["active_clip"], "naughty");
+        assert_eq!(naughty_res["queued"], true);
+
+        // Before animation completes, pet is still in sit emotion and naughty is queued
+        let pre_state = client.get_state();
+        assert_eq!(pre_state["emotion"], "sit");
+        assert_eq!(pre_state["queue"][0], "naughty");
+
+        // Complete current animation to consume queue
+        let comp_res = client.complete_animation();
+        assert_eq!(comp_res["transitioned"], true);
+        assert_eq!(comp_res["emotion"], "naughty");
 
         // 2. State verification
         let state = client.get_state();
@@ -593,6 +634,9 @@ fn test_pet_behavior_fallback_resolution_and_tinting() {
         assert!((tint[1].as_f64().unwrap() - 0.85).abs() < 1e-4);
         assert!((tint[2].as_f64().unwrap() - 1.05).abs() < 1e-4);
 
+        // Complete current animation to consume queued "sad"
+        client.complete_animation();
+
         // Frame capture verifies current emotion is sad
         let sad_frame = client.get_frame("clip", true, None);
         assert_eq!(sad_frame["emotion"], "sad");
@@ -624,6 +668,9 @@ fn test_pet_behavior_fallback_resolution_and_tinting() {
         };
         assert_eq!(smirk_res["active_clip"], expected_smirk_clip);
 
+        // Complete current animation to consume queued "smirk"
+        client.complete_animation();
+
         let smirk_frame = client.get_frame("clip", true, None);
         assert_eq!(smirk_frame["emotion"], "smirk");
         assert_eq!(smirk_frame["clip"], expected_smirk_clip);
@@ -643,6 +690,9 @@ fn test_pet_behavior_fallback_resolution_and_tinting() {
             "sit"
         };
         assert_eq!(tired_res["active_clip"], expected_tired_clip);
+
+        // Complete current animation to consume queued "tired"
+        client.complete_animation();
 
         let tired_frame = client.get_frame("clip", true, None);
         assert_eq!(tired_frame["emotion"], "tired");
@@ -825,5 +875,100 @@ fn test_pet_behavior_error_handling() {
                 .unwrap()
                 .contains("Method not found")
         );
+    });
+}
+
+#[test]
+fn test_pet_behavior_emotion_queue_order_and_limit() {
+    run_desktop_pet_rpc_test(|client, _out_dir| {
+        // Initially in "sit" emotion with an empty queue
+        let state0 = client.get_state();
+        assert_eq!(state0["emotion"], "sit");
+        assert_eq!(state0["queue"].as_array().unwrap().len(), 0);
+
+        // 1. Push 1st emotion ("happy"): does not directly change current emotion
+        let r1 = client.set_emotion("happy");
+        assert_eq!(r1["success"], true);
+        assert_eq!(r1["queued"], true);
+        assert_eq!(r1["emotion"], "happy");
+        assert_eq!(r1["current_emotion"], "sit");
+
+        let s1 = client.get_state();
+        assert_eq!(s1["emotion"], "sit");
+        assert_eq!(s1["queue"], json!(["happy"]));
+
+        // 2. Push 2nd emotion ("naughty")
+        let r2 = client.set_emotion("naughty");
+        assert_eq!(r2["success"], true);
+        assert_eq!(r2["current_emotion"], "sit");
+
+        let s2 = client.get_state();
+        assert_eq!(s2["emotion"], "sit");
+        assert_eq!(s2["queue"], json!(["happy", "naughty"]));
+
+        // 3. Push 3rd emotion ("angry"): fills queue capacity to 3
+        let r3 = client.set_emotion("angry");
+        assert_eq!(r3["success"], true);
+        assert_eq!(r3["current_emotion"], "sit");
+
+        let s3 = client.get_state();
+        assert_eq!(s3["emotion"], "sit");
+        assert_eq!(s3["queue"], json!(["happy", "naughty", "angry"]));
+
+        // 4. Push 4th emotion ("smirk"): queue has 3 emotions, so pop the last one ("angry")
+        // and push the current one ("smirk"). Queue becomes ["happy", "naughty", "smirk"].
+        let r4 = client.set_emotion("smirk");
+        assert_eq!(r4["success"], true);
+        assert_eq!(r4["queue"], json!(["happy", "naughty", "smirk"]));
+
+        let s4 = client.get_state();
+        assert_eq!(s4["emotion"], "sit");
+        assert_eq!(s4["queue"], json!(["happy", "naughty", "smirk"]));
+
+        // 5. Push 5th emotion ("sad"): pop last one ("smirk"), push "sad"
+        // Queue becomes ["happy", "naughty", "sad"].
+        let r5 = client.set_emotion("sad");
+        assert_eq!(r5["success"], true);
+        assert_eq!(r5["queue"], json!(["happy", "naughty", "sad"]));
+
+        // 6. Complete animation 1: consumes "happy", emotion transitions to "happy"
+        let c1 = client.complete_animation();
+        assert_eq!(c1["transitioned"], true);
+        assert_eq!(c1["emotion"], "happy");
+        assert_eq!(c1["queue"], json!(["naughty", "sad"]));
+
+        let sc1 = client.get_state();
+        assert_eq!(sc1["emotion"], "happy");
+        assert_eq!(sc1["queue"], json!(["naughty", "sad"]));
+
+        // 7. Complete animation 2: consumes "naughty", emotion transitions to "naughty"
+        let c2 = client.complete_animation();
+        assert_eq!(c2["transitioned"], true);
+        assert_eq!(c2["emotion"], "naughty");
+        assert_eq!(c2["queue"], json!(["sad"]));
+
+        // 8. Complete animation 3: consumes "sad", emotion transitions to "sad"
+        let c3 = client.complete_animation();
+        assert_eq!(c3["transitioned"], true);
+        assert_eq!(c3["emotion"], "sad");
+        assert_eq!(c3["queue"].as_array().unwrap().len(), 0);
+
+        // 9. Complete animation 4: queue is empty! Keeps current emotion ("sad")
+        let c4 = client.complete_animation();
+        assert_eq!(c4["transitioned"], false);
+        assert_eq!(c4["emotion"], "sad");
+
+        let sc4 = client.get_state();
+        assert_eq!(sc4["emotion"], "sad");
+        assert_eq!(sc4["queue"].as_array().unwrap().len(), 0);
+
+        // 10. Test clear_queue
+        client.set_emotion("happy");
+        client.set_emotion("naughty");
+        assert_eq!(client.get_state()["queue"].as_array().unwrap().len(), 2);
+
+        let clear_res = client.clear_queue();
+        assert_eq!(clear_res["success"], true);
+        assert_eq!(client.get_state()["queue"].as_array().unwrap().len(), 0);
     });
 }

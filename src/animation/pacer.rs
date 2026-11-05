@@ -29,18 +29,27 @@ impl FramePacer {
     }
 
     /// Advance to the next frame if the frame interval has elapsed.
-    pub fn advance_frame(&mut self, total_frames: usize) -> bool {
+    /// Returns (advanced, completed_cycle) where completed_cycle is true when
+    /// the animation cycle has finished (wraps from last frame to 0).
+    pub fn advance_frame_cycle(&mut self, total_frames: usize) -> (bool, bool) {
         if total_frames == 0 {
-            return false;
+            return (false, false);
         }
         let elapsed = self.last_frame_instant.elapsed();
         if elapsed >= self.frame_duration {
             self.last_frame_instant = Instant::now();
+            let completed = (self.current_frame_index + 1) >= total_frames;
             self.current_frame_index = (self.current_frame_index + 1) % total_frames;
-            true
+            (true, completed)
         } else {
-            false
+            (false, false)
         }
+    }
+
+    /// Advance to the next frame if the frame interval has elapsed.
+    #[allow(dead_code)]
+    pub fn advance_frame(&mut self, total_frames: usize) -> bool {
+        self.advance_frame_cycle(total_frames).0
     }
 
     pub fn current_index(&self) -> usize {
@@ -80,6 +89,26 @@ mod tests {
         assert_eq!(pacer.current_index(), 1);
 
         pacer.reset();
+        assert_eq!(pacer.current_index(), 0);
+
+        // Test cycle completion detection: advance 3 frames with total_frames = 3
+        pacer.last_frame_instant = Instant::now() - Duration::from_millis(100);
+        let (adv, completed) = pacer.advance_frame_cycle(3);
+        assert!(adv);
+        assert!(!completed);
+        assert_eq!(pacer.current_index(), 1);
+
+        pacer.last_frame_instant = Instant::now() - Duration::from_millis(100);
+        let (adv, completed) = pacer.advance_frame_cycle(3);
+        assert!(adv);
+        assert!(!completed);
+        assert_eq!(pacer.current_index(), 2);
+
+        // Frame 2 -> 0 completes cycle
+        pacer.last_frame_instant = Instant::now() - Duration::from_millis(100);
+        let (adv, completed) = pacer.advance_frame_cycle(3);
+        assert!(adv);
+        assert!(completed);
         assert_eq!(pacer.current_index(), 0);
     }
 }

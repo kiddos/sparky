@@ -162,6 +162,8 @@ pub fn is_main_thread_method(method: &str) -> bool {
         "sparky.get_state"
             | "sparky.get_frame"
             | "sparky.set_emotion"
+            | "sparky.complete_animation"
+            | "sparky.clear_queue"
             | "sparky.pet"
             | "sparky.poke"
             | "sparky.touch"
@@ -225,11 +227,23 @@ pub fn discover_rpc_methods() -> serde_json::Value {
             },
             {
                 "name": "sparky.set_emotion",
-                "description": "Transitions the pet to a specific emotion (e.g. sit, happy, angry, naughty, sad, smirk, proud)",
+                "description": "Pushes a target emotion (e.g. sit, happy, angry, naughty, sad, smirk, proud) into the emotion queue to play after current animation completes",
                 "params": [
-                    { "name": "emotion", "description": "Target emotion ID", "required": true, "schema": { "type": "string" } }
+                    { "name": "emotion", "description": "Target emotion ID to push to queue", "required": true, "schema": { "type": "string" } }
                 ],
-                "result": { "description": "Transition result with resolved clip and shader tint" }
+                "result": { "description": "Queue confirmation with resolved clip, tint, and updated queue" }
+            },
+            {
+                "name": "sparky.complete_animation",
+                "description": "Simulates completion of the current animation cycle, consuming the next emotion from the queue or keeping current emotion if empty",
+                "params": [],
+                "result": { "description": "Updated emotion state after consuming queue" }
+            },
+            {
+                "name": "sparky.clear_queue",
+                "description": "Clears all pending emotions in the emotion queue",
+                "params": [],
+                "result": { "description": "Confirmation of cleared queue" }
             },
             {
                 "name": "sparky.list_emotions",
@@ -357,6 +371,8 @@ pub fn execute_main_thread_command(
             let (win_w, win_h) = pet_window.window.get_size();
             Ok(json!({
                 "emotion": state_machine.current_emotion,
+                "queue": state_machine.emotion_queue.iter().collect::<Vec<_>>(),
+                "emotion_queue": state_machine.emotion_queue.iter().collect::<Vec<_>>(),
                 "active_clip": state_machine.active_clip_name,
                 "active_tint": state_machine.active_tint,
                 "window": {
@@ -479,14 +495,16 @@ pub fn execute_main_thread_command(
                 })?;
 
             if emotion_registry.get(&emotion_id).is_some() {
-                state_machine.transition_to(&emotion_id, emotion_registry);
-                chat_state.current_emotion_id = emotion_id.clone();
-                frame_pacer.reset();
+                let (clip, tint) = emotion_registry.resolve_visuals(&emotion_id);
+                state_machine.push_emotion(&emotion_id, emotion_registry);
                 Ok(json!({
                     "success": true,
                     "emotion": emotion_id,
-                    "active_clip": state_machine.active_clip_name,
-                    "active_tint": state_machine.active_tint,
+                    "queued": true,
+                    "queue": state_machine.emotion_queue.iter().collect::<Vec<_>>(),
+                    "current_emotion": state_machine.current_emotion,
+                    "active_clip": clip,
+                    "active_tint": tint,
                 }))
             } else {
                 Err(RpcError::invalid_params(format!(
@@ -496,22 +514,52 @@ pub fn execute_main_thread_command(
                 )))
             }
         }
-        "sparky.pet" => {
-            state_machine.on_pet(emotion_registry);
-            chat_state.current_emotion_id = "happy".to_string();
-            frame_pacer.reset();
+        "sparky.complete_animation" => {
+            let transitioned = state_machine.on_animation_completed(emotion_registry);
+            if transitioned {
+                chat_state.current_emotion_id = state_machine.current_emotion.clone();
+                frame_pacer.reset();
+            }
             Ok(json!({
                 "success": true,
+                "transitioned": transitioned,
                 "emotion": state_machine.current_emotion,
+                "active_clip": state_machine.active_clip_name,
+                "active_tint": state_machine.active_tint,
+                "queue": state_machine.emotion_queue.iter().collect::<Vec<_>>(),
+            }))
+        }
+        "sparky.clear_queue" => {
+            state_machine.clear_queue();
+            Ok(json!({
+                "success": true,
+                "queue": [],
+            }))
+        }
+        "sparky.pet" => {
+            state_machine.on_pet(emotion_registry);
+            let (clip, tint) = emotion_registry.resolve_visuals("happy");
+            Ok(json!({
+                "success": true,
+                "emotion": "happy",
+                "queued": true,
+                "queue": state_machine.emotion_queue.iter().collect::<Vec<_>>(),
+                "current_emotion": state_machine.current_emotion,
+                "active_clip": clip,
+                "active_tint": tint,
             }))
         }
         "sparky.poke" => {
             state_machine.on_poke(emotion_registry);
-            chat_state.current_emotion_id = "angry".to_string();
-            frame_pacer.reset();
+            let (clip, tint) = emotion_registry.resolve_visuals("angry");
             Ok(json!({
                 "success": true,
-                "emotion": state_machine.current_emotion,
+                "emotion": "angry",
+                "queued": true,
+                "queue": state_machine.emotion_queue.iter().collect::<Vec<_>>(),
+                "current_emotion": state_machine.current_emotion,
+                "active_clip": clip,
+                "active_tint": tint,
             }))
         }
         "sparky.touch" => {
@@ -764,6 +812,10 @@ mod tests {
         assert!(!is_main_thread_method("sparky_getDisplayFrame"));
         assert!(!is_main_thread_method("set_emotion"));
         assert!(!is_main_thread_method("sparky_setEmotion"));
+        assert!(!is_main_thread_method("complete_animation"));
+        assert!(!is_main_thread_method("sparky_completeAnimation"));
+        assert!(!is_main_thread_method("clear_queue"));
+        assert!(!is_main_thread_method("sparky_clearQueue"));
         assert!(!is_main_thread_method("pet"));
         assert!(!is_main_thread_method("sparky_pet"));
         assert!(!is_main_thread_method("poke"));
@@ -797,6 +849,8 @@ mod tests {
         assert!(is_main_thread_method("sparky.get_state"));
         assert!(is_main_thread_method("sparky.get_frame"));
         assert!(is_main_thread_method("sparky.set_emotion"));
+        assert!(is_main_thread_method("sparky.complete_animation"));
+        assert!(is_main_thread_method("sparky.clear_queue"));
         assert!(is_main_thread_method("sparky.pet"));
         assert!(is_main_thread_method("sparky.poke"));
         assert!(is_main_thread_method("sparky.touch"));

@@ -336,9 +336,7 @@ fn main() -> Result<()> {
                 } else if menu_event.id == tray.quit_item.id() {
                     pet_window.window.set_should_close(true);
                 } else if let Some(emotion_id) = tray.emotion_menu_items.get(&menu_event.id) {
-                    state_machine.transition_to(emotion_id, &emotion_registry);
-                    chat_state.current_emotion_id = emotion_id.clone();
-                    frame_pacer.reset();
+                    state_machine.push_emotion(emotion_id, &emotion_registry);
                 }
             }
         }
@@ -360,9 +358,7 @@ fn main() -> Result<()> {
                     chat_state.is_generating = false;
                     chat_state.focus_input = true;
                     if let Some(tag) = action_tag {
-                        state_machine.transition_to(&tag, &emotion_registry);
-                        chat_state.current_emotion_id = tag;
-                        frame_pacer.reset();
+                        state_machine.push_emotion(&tag, &emotion_registry);
                     }
                 }
                 brain::BrainResponse::Error(err) => {
@@ -383,12 +379,17 @@ fn main() -> Result<()> {
             let mut should_render = false;
 
             if let Some(clip) = clips.get(active_clip) {
-                if frame_count == 0 || frame_pacer.advance_frame(clip.frames.len()) {
+                let (advanced, completed) = frame_pacer.advance_frame_cycle(clip.frames.len());
+                if frame_count == 0 || advanced {
                     let frame_idx = frame_pacer.current_index();
                     if let Some(frame) = clip.frames.get(frame_idx) {
                         quad.update_texture(frame.width, frame.height, &frame.rgb_data);
                         should_render = true;
                     }
+                }
+                if completed && state_machine.on_animation_completed(&emotion_registry) {
+                    chat_state.current_emotion_id = state_machine.current_emotion.clone();
+                    frame_pacer.reset();
                 }
             }
 
@@ -448,9 +449,7 @@ fn main() -> Result<()> {
                     });
 
                     if let Some(emotion_id) = triggered_emotion {
-                        state_machine.transition_to(&emotion_id, &emotion_registry);
-                        chat_state.current_emotion_id = emotion_id;
-                        frame_pacer.reset();
+                        state_machine.push_emotion(&emotion_id, &emotion_registry);
                     }
 
                     unsafe {
