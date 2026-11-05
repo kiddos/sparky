@@ -287,20 +287,20 @@ sudo apt-get update && sudo apt-get install -y \
     build-essential cmake pkg-config \
     libglfw3-dev libgl1-mesa-dev libx11-dev libxcursor-dev \
     libxrandr-dev libxinerama-dev libxi-dev \
-    libayatana-appindicator3-dev ffmpeg
+    libgtk-3-dev libayatana-appindicator3-dev libxdo-dev ffmpeg
 
 # Fedora
 sudo dnf install -y \
     gcc gcc-c++ cmake pkgconf-pkg-config \
     glfw-devel mesa-libGL-devel libX11-devel libXcursor-devel \
     libXrandr-devel libXinerama-devel libXi-devel \
-    libappindicator-gtk3-devel ffmpeg
+    gtk3-devel libappindicator-gtk3-devel libxdo-devel ffmpeg
 
 # Arch Linux
 sudo pacman -S --needed \
     base-devel cmake pkgconf glfw-x11 mesa \
     libx11 libxcursor libxrandr libxinerama libxi \
-    libappindicator-gtk3 ffmpeg
+    gtk3 libappindicator-gtk3 xdotool ffmpeg
 ```
 
 ### 5.2. Build, Test, and Quality Commands
