@@ -1,0 +1,84 @@
+# ==============================================================================
+# Sparky Extensible Emotion Definitions
+# ==============================================================================
+
+[emotions.sit]
+name = "Sit"
+emoji = "🐱"
+asset = "sit.webp"
+loop_mode = "Loop"
+duration_secs = 8.0
+prompt_description = "calm, content, neutral, observing"
+
+[emotions.happy]
+name = "Happy"
+emoji = "😺"
+asset = "happy.webp"
+loop_mode = "OnceThenReturn"
+return_to = "sit"
+duration_secs = 8.0
+prompt_description = "affectionate, praised, petted, ecstatic, purring"
+
+[emotions.naughty]
+name = "Naughty"
+emoji = "😼"
+asset = "naughty.webp"
+loop_mode = "OnceThenReturn"
+return_to = "sit"
+duration_secs = 8.0
+prompt_description = "playful, mischievous, swiping, energetic"
+
+[emotions.angry]
+name = "Angry"
+emoji = "😾"
+asset = "angry.webp"
+loop_mode = "OnceThenReturn"
+return_to = "sit"
+duration_secs = 8.0
+prompt_description = "provoked, startled, irritated, defensive hiss"
+
+# ------------------------------------------------------------------------------
+# Extended Emotions: Sad, Smirk, Curious, Sleep
+# ------------------------------------------------------------------------------
+
+[emotions.sad]
+name = "Sad"
+emoji = "😿"
+asset = "sad.webp"
+fallback = "sit"
+shader_tint = [0.80, 0.85, 1.05]
+loop_mode = "OnceThenReturn"
+return_to = "sit"
+duration_secs = 10.0
+prompt_description = "neglected, scolded, whimpering, lonely, drooping ears"
+
+[emotions.smirk]
+name = "Smirk"
+emoji = "😏"
+asset = "smirk.webp"
+fallback = "naughty"
+shader_tint = [1.0, 1.0, 1.0]
+loop_mode = "OnceThenReturn"
+return_to = "sit"
+duration_secs = 6.0
+prompt_description = "sly, smug, cheeky, sarcastic, knowing grin"
+
+[emotions.curious]
+name = "Curious"
+emoji = "🧐"
+asset = "curious.webp"
+fallback = "sit"
+shader_tint = [1.0, 1.0, 1.0]
+loop_mode = "OnceThenReturn"
+return_to = "sit"
+duration_secs = 7.0
+prompt_description = "intrigued by questions, ears perked, head tilted"
+
+[emotions.sleep]
+name = "Sleep"
+emoji = "💤"
+asset = "sleep.webp"
+fallback = "sit"
+loop_mode = "Loop"
+duration_secs = 15.0
+prompt_description = "tired, lazy, night time, bored, curled up asleep"

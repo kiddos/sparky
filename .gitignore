@@ -1,6 +1,6 @@
 /target
 /.venv
 /models
-/assets
+/assets/animations
 /animations
 *.AppImage
