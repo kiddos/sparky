@@ -134,6 +134,11 @@ impl EmotionRegistry {
         self.order.clone()
     }
 
+    #[allow(dead_code)]
+    pub fn has_asset(&self, asset_filename: &str) -> bool {
+        self.available_assets.iter().any(|a| a == asset_filename)
+    }
+
     /// Resolves the effective animation asset name and shader tint, applying fallback if needed
     pub fn resolve_visuals(&self, emotion_id: &str) -> (String, [f32; 3]) {
         if let Some(def) = self.get(emotion_id) {
@@ -189,9 +194,13 @@ mod tests {
         assert_eq!(clip, "sit");
         assert_eq!(tint, [0.80, 0.85, 1.05]);
 
-        // Visual resolution for smirk -> fallback to naughty
+        // Visual resolution for smirk -> resolves to smirk if asset present, else fallback to naughty
         let (clip, tint) = registry.resolve_visuals("smirk");
-        assert_eq!(clip, "naughty");
+        if registry.has_asset("smirk.webp") {
+            assert_eq!(clip, "smirk");
+        } else {
+            assert_eq!(clip, "naughty");
+        }
         assert_eq!(tint, [1.0, 1.0, 1.0]);
     }
 }

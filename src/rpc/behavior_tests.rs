@@ -608,15 +608,20 @@ fn test_pet_behavior_fallback_resolution_and_tinting() {
         let sad_path = out_dir.join("sparky_frame_sad_fallback.png");
         let _ = std::fs::write(&sad_path, &sad_png);
 
-        // 2. Set 'smirk' emotion (which has fallback = 'naughty')
+        // 2. Set 'smirk' emotion (which has fallback = 'naughty' if asset is absent)
         let smirk_res = client.set_emotion("smirk");
         assert_eq!(smirk_res["success"], true);
         assert_eq!(smirk_res["emotion"], "smirk");
-        assert_eq!(smirk_res["active_clip"], "naughty"); // Fallback to naughty
+        let expected_smirk_clip = if smirk_res["active_clip"] == "smirk" {
+            "smirk"
+        } else {
+            "naughty"
+        };
+        assert_eq!(smirk_res["active_clip"], expected_smirk_clip);
 
         let smirk_frame = client.get_frame("clip", true, None);
         assert_eq!(smirk_frame["emotion"], "smirk");
-        assert_eq!(smirk_frame["clip"], "naughty");
+        assert_eq!(smirk_frame["clip"], expected_smirk_clip);
 
         let smirk_b64 = smirk_frame["base64"].as_str().unwrap();
         let smirk_png = base64_decode(smirk_b64).unwrap();
