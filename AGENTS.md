@@ -4,7 +4,7 @@
 > **Repository Root:** `/home/kiddos/projects/tools/sparky`  
 > **Language & Edition:** Rust 2024 (`rustc 1.99+`)  
 > **Graphics Stack:** OpenGL 3.3 Core, GLFW (`glfw = "0.59"`, `gl = "0.14"`)  
-> **Cognition Engine:** Google Gemma 3 270M IT (`google/gemma-3-270m-it`) via Hugging Face Candle (`candle-core = "0.8"`)  
+> **Cognition Engine:** Google Gemma 3 270M IT (`google/gemma-3-270m-it`) via llama.cpp GGUF (`llama-cpp-2 = "0.1.161"`, low RAM) & Hugging Face Candle (`candle-core = "0.8"`)  
 > **GUI & System Integration:** Immediate-mode `egui` (`0.31`), `egui_gl_glfw` (`0.1.13`), `tray-icon` (`0.19`), `muda` (`0.15`), GTK 3 (`gtk = "0.18"`)  
 > **Target OS:** Linux (X11 / XWayland), cross-platform extensible to macOS & Windows  
 
@@ -111,6 +111,7 @@ sparky/
 │   └── chroma.frag                 # CbCr chrominance distance keyer with green despill & emotion tint
 │
 ├── scripts/
+│   ├── download_gemma3_gguf.sh     # Downloader for Gemma 3 270M Q4_K_M GGUF (~165MB)
 │   ├── download_gemma3_270m.sh     # HuggingFace downloader for Gemma 3 270M safetensors & tokenizer
 │   └── transcode_assets.sh         # ffmpeg batch pipeline converting videos/*.mp4 -> assets/animations/*.webp
 │
@@ -123,8 +124,9 @@ sparky/
     │   └── pacer.rs                # High-precision frame timing, delay calculation, and frame index stepping
     │
     ├── brain/
-    │   ├── mod.rs                  # Module exports for LLM cognition engine
-    │   ├── candle_engine.rs        # Worker thread, lazy model loading, Candle CPU forward pass & fallback
+    │   ├── mod.rs                  # Unified brain interface, BrainBackend (Auto, Gguf, Candle), auto-detection
+    │   ├── gguf_engine.rs          # Low-RAM GGUF inference engine via llama-cpp-2 (Q4_K_M, mmap, sampler)
+    │   ├── candle_engine.rs        # Candle transformer engine (safetensors full-precision) & fallback
     │   └── prompt.rs               # Dynamic system prompt generation from registry, <action> tag extraction
     │
     ├── render/
