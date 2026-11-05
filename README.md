@@ -322,7 +322,18 @@ cargo run --release -- --profile-run
 
 ---
 
-## 📦 Standalone AppImage Packaging
+## 📦 Single Executable & Windows Build
+
+Sparky is engineered to run as a **single standalone executable** on both Windows (`sparky.exe`) and Linux (`sparky`):
+- **Compile-Time Asset Embedding:** Shaders (`shaders/*.vert`, `shaders/*.frag`), emotion schemas (`assets/emotions.toml`), all 8 core WebP animation clips (`assets/animations/*.webp`), and tray icons are compiled directly into the binary's `.rodata` section via Rust's `include_str!` and `include_bytes!`.
+- **Cascading Fallback Loader:** If local asset files exist on disk, Sparky loads them dynamically (allowing user customization via `--animations-dir` and `--emotions-config`). When moved or run outside the source repository, it transparently falls back to the embedded assets with zero configuration.
+- **Windows GUI Subsystem:** On Windows release builds, `#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]` suppresses unwanted background terminal windows when double-clicked, while dynamically attaching to the parent console if invoked from PowerShell or CMD (`--help`, `--profile-run`, or CLI commands).
+
+### GitHub Actions CI/CD Workflows
+- **[Windows Build (`.github/workflows/windows.yml`)](.github/workflows/windows.yml):** Builds and tests the standalone `sparky.exe` single executable on `windows-latest` across pushes, pull requests, manual dispatch, and releases.
+- **[Multi-Platform Release (`.github/workflows/release.yml`)](.github/workflows/release.yml):** Builds and attaches both the standalone Linux AppImage (`Sparky-x86_64.AppImage`) and Windows single executable (`sparky.exe`) with SHA256 checksums to GitHub Releases.
+
+## 📦 Standalone AppImage Packaging (Linux)
 
 Sparky includes an automated packaging pipeline to create a self-contained, portable Linux AppImage:
 
