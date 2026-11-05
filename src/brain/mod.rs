@@ -144,11 +144,11 @@ pub const GEMMA3_GGUF_FILENAME: &str = "gemma-3-270m-it-q4_k_m.gguf";
 pub const GEMMA3_GGUF_UPSTREAM_FILENAME: &str = "gemma-3-270m-it-Q4_K_M.gguf";
 
 /// Hugging Face repository containing Gemma 3 GGUF models
-pub const GEMMA3_GGUF_REPO: &str = "google/gemma-3-270m-it-GGUF";
+pub const GEMMA3_GGUF_REPO: &str = "unsloth/gemma-3-270m-it-GGUF";
 
 /// Direct Hugging Face download URL for Gemma 3 270M Q4_K_M GGUF
 pub const GEMMA3_GGUF_DIRECT_URL: &str =
-    "https://huggingface.co/google/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_K_M.gguf";
+    "https://huggingface.co/unsloth/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_K_M.gguf";
 
 /// Finds the path to the GGUF model file if it exists on disk.
 pub fn find_gguf_model(model_path: &Path) -> Option<PathBuf> {
@@ -183,14 +183,19 @@ pub fn find_gguf_model(model_path: &Path) -> Option<PathBuf> {
         }
     }
 
-    // Check standard default locations
-    let default_path1 = Path::new("models/gemma-3-270m").join(GEMMA3_GGUF_FILENAME);
-    if default_path1.is_file() {
-        return Some(default_path1);
-    }
-    let default_path2 = Path::new("models/gemma-3-270m").join(GEMMA3_GGUF_UPSTREAM_FILENAME);
-    if default_path2.is_file() {
-        return Some(default_path2);
+    // Check standard default locations only if model_path does not exist or is the default directory
+    if !model_path.exists()
+        || model_path == Path::new("models")
+        || model_path == Path::new("models/gemma-3-270m")
+    {
+        let default_path1 = Path::new("models/gemma-3-270m").join(GEMMA3_GGUF_FILENAME);
+        if default_path1.is_file() {
+            return Some(default_path1);
+        }
+        let default_path2 = Path::new("models/gemma-3-270m").join(GEMMA3_GGUF_UPSTREAM_FILENAME);
+        if default_path2.is_file() {
+            return Some(default_path2);
+        }
     }
 
     None
@@ -232,6 +237,7 @@ pub fn download_gguf_model(dest_path: &Path) -> anyhow::Result<PathBuf> {
         if let Ok(st) = status
             && st.success()
             && dest_path.is_file()
+            && dest_path.metadata().map(|m| m.len()).unwrap_or(0) >= 50_000_000
         {
             log::info!("GGUF model downloaded successfully via download script.");
             return Ok(dest_path.to_path_buf());
@@ -255,7 +261,9 @@ pub fn download_gguf_model(dest_path: &Path) -> anyhow::Result<PathBuf> {
             if downloaded.is_file() && downloaded != dest_path {
                 let _ = std::fs::rename(&downloaded, dest_path);
             }
-            if dest_path.is_file() {
+            if dest_path.is_file()
+                && dest_path.metadata().map(|m| m.len()).unwrap_or(0) >= 50_000_000
+            {
                 return Ok(dest_path.to_path_buf());
             }
         }
@@ -273,6 +281,7 @@ pub fn download_gguf_model(dest_path: &Path) -> anyhow::Result<PathBuf> {
     if let Ok(st) = status
         && st.success()
         && dest_path.is_file()
+        && dest_path.metadata().map(|m| m.len()).unwrap_or(0) >= 50_000_000
     {
         log::info!("GGUF model downloaded successfully via curl.");
         return Ok(dest_path.to_path_buf());
@@ -288,6 +297,7 @@ pub fn download_gguf_model(dest_path: &Path) -> anyhow::Result<PathBuf> {
     if let Ok(st) = status
         && st.success()
         && dest_path.is_file()
+        && dest_path.metadata().map(|m| m.len()).unwrap_or(0) >= 50_000_000
     {
         log::info!("GGUF model downloaded successfully via wget.");
         return Ok(dest_path.to_path_buf());
