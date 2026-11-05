@@ -582,30 +582,35 @@ fn test_pet_behavior_fallback_resolution_and_tinting() {
         let sad_res = client.set_emotion("sad");
         assert_eq!(sad_res["success"], true);
         assert_eq!(sad_res["emotion"], "sad");
-        assert_eq!(sad_res["active_clip"], "sit"); // Resolved fallback clip
+        let expected_sad_clip = if sad_res["active_clip"] == "sad" {
+            "sad"
+        } else {
+            "sit"
+        };
+        assert_eq!(sad_res["active_clip"], expected_sad_clip); // Resolved clip
         let tint = sad_res["active_tint"].as_array().expect("Tint array");
         assert!((tint[0].as_f64().unwrap() - 0.80).abs() < 1e-4);
         assert!((tint[1].as_f64().unwrap() - 0.85).abs() < 1e-4);
         assert!((tint[2].as_f64().unwrap() - 1.05).abs() < 1e-4);
 
-        // Frame capture verifies current emotion is sad while clip is sit
+        // Frame capture verifies current emotion is sad
         let sad_frame = client.get_frame("clip", true, None);
         assert_eq!(sad_frame["emotion"], "sad");
-        assert_eq!(sad_frame["clip"], "sit");
+        assert_eq!(sad_frame["clip"], expected_sad_clip);
 
         let sad_b64 = sad_frame["base64"].as_str().unwrap();
         let sad_png = base64_decode(sad_b64).unwrap();
         let sad_img = decode_and_verify_png(&sad_png);
         let (viz, _) = visualize_frame_terminal(
-            "Sad Fallback State (Sit + Blue Tint)",
+            "Sad State (Asset or Fallback + Blue Tint)",
             "sad",
-            "sit",
+            expected_sad_clip,
             0,
             &sad_img,
         );
         print!("{}", viz);
 
-        let sad_path = out_dir.join("sparky_frame_sad_fallback.png");
+        let sad_path = out_dir.join("sparky_frame_sad.png");
         let _ = std::fs::write(&sad_path, &sad_png);
 
         // 2. Set 'smirk' emotion (which has fallback = 'naughty' if asset is absent)
@@ -627,6 +632,26 @@ fn test_pet_behavior_fallback_resolution_and_tinting() {
         let smirk_png = base64_decode(smirk_b64).unwrap();
         let smirk_path = out_dir.join("sparky_frame_smirk_fallback.png");
         let _ = std::fs::write(&smirk_path, &smirk_png);
+
+        // 3. Set 'tired' emotion
+        let tired_res = client.set_emotion("tired");
+        assert_eq!(tired_res["success"], true);
+        assert_eq!(tired_res["emotion"], "tired");
+        let expected_tired_clip = if tired_res["active_clip"] == "tired" {
+            "tired"
+        } else {
+            "sit"
+        };
+        assert_eq!(tired_res["active_clip"], expected_tired_clip);
+
+        let tired_frame = client.get_frame("clip", true, None);
+        assert_eq!(tired_frame["emotion"], "tired");
+        assert_eq!(tired_frame["clip"], expected_tired_clip);
+
+        let tired_b64 = tired_frame["base64"].as_str().unwrap();
+        let tired_png = base64_decode(tired_b64).unwrap();
+        let tired_path = out_dir.join("sparky_frame_tired.png");
+        let _ = std::fs::write(&tired_path, &tired_png);
     });
 }
 

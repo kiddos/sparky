@@ -183,15 +183,21 @@ mod tests {
         assert!(registry.get("angry").is_some());
         assert!(registry.get("sad").is_some());
         assert!(registry.get("smirk").is_some());
+        assert!(registry.get("tired").is_some());
+        assert!(registry.get("sleep").is_some());
 
         // Visual resolution for present assets
         let (clip, tint) = registry.resolve_visuals("happy");
         assert_eq!(clip, "happy");
         assert_eq!(tint, [1.0, 1.0, 1.0]);
 
-        // Visual resolution for fallback asset (sad -> fallback to sit with cold tint)
+        // Visual resolution for sad -> resolves to sad if asset present, else fallback to sit with cold tint
         let (clip, tint) = registry.resolve_visuals("sad");
-        assert_eq!(clip, "sit");
+        if registry.has_asset("sad.webp") {
+            assert_eq!(clip, "sad");
+        } else {
+            assert_eq!(clip, "sit");
+        }
         assert_eq!(tint, [0.80, 0.85, 1.05]);
 
         // Visual resolution for smirk -> resolves to smirk if asset present, else fallback to naughty
@@ -202,5 +208,24 @@ mod tests {
             assert_eq!(clip, "naughty");
         }
         assert_eq!(tint, [1.0, 1.0, 1.0]);
+
+        // Visual resolution for tired -> resolves to tired if asset present, else fallback to sit
+        let (clip, tint) = registry.resolve_visuals("tired");
+        if registry.has_asset("tired.webp") {
+            assert_eq!(clip, "tired");
+        } else {
+            assert_eq!(clip, "sit");
+        }
+        assert_eq!(tint, [1.0, 1.0, 1.0]);
+
+        // Visual resolution for sleep (no asset) -> falls back to tired if tired.webp present, else sit
+        let (clip, _) = registry.resolve_visuals("sleep");
+        if registry.has_asset("sleep.webp") {
+            assert_eq!(clip, "sleep");
+        } else if registry.has_asset("tired.webp") {
+            assert_eq!(clip, "tired");
+        } else {
+            assert_eq!(clip, "sit");
+        }
     }
 }

@@ -239,14 +239,24 @@ impl BrainEngine {
                 "*tilts head curiously with perked ears* Mew? That sounds fascinating! Tell me more about it!",
                 "curious",
             )
-        } else if p.contains("sleep")
-            || p.contains("tired")
-            || p.contains("night")
-            || p.contains("bed")
-            || p.contains("rest")
+        } else if p.contains("tired")
+            || p.contains("yawn")
+            || p.contains("exhausted")
+            || p.contains("drowsy")
         {
             (
-                "*yawns widely and curls up into a tight ball* Zzz... so sleepy... wake me up at feeding time...",
+                "*yawns widely and rubs eyes with a tiny paw* So tired... my eyelids feel so heavy...",
+                "tired",
+            )
+        } else if p.contains("sleep")
+            || p.contains("night")
+            || p.contains("bed")
+            || p.contains("nap")
+            || p.contains("rest")
+            || p.contains("shh")
+        {
+            (
+                "*curls up into a tight ball* Zzz... so sleepy... wake me up at feeding time...",
                 "sleep",
             )
         } else {

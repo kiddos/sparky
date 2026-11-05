@@ -102,10 +102,37 @@ mod tests {
         assert_eq!(sm.current_emotion, "angry");
         assert_eq!(sm.active_clip_name, "angry");
 
-        // Extended emotion with fallback
+        // Extended emotion with dedicated asset or fallback
         sm.transition_to("sad", &registry);
         assert_eq!(sm.current_emotion, "sad");
-        assert_eq!(sm.active_clip_name, "sit"); // fallback to sit
+        let expected_sad_clip = if registry.has_asset("sad.webp") {
+            "sad"
+        } else {
+            "sit"
+        };
+        assert_eq!(sm.active_clip_name, expected_sad_clip);
         assert_eq!(sm.active_tint, [0.80, 0.85, 1.05]);
+
+        // Extended emotion tired
+        sm.transition_to("tired", &registry);
+        assert_eq!(sm.current_emotion, "tired");
+        let expected_tired_clip = if registry.has_asset("tired.webp") {
+            "tired"
+        } else {
+            "sit"
+        };
+        assert_eq!(sm.active_clip_name, expected_tired_clip);
+
+        // Extended emotion sleep with fallback
+        sm.transition_to("sleep", &registry);
+        assert_eq!(sm.current_emotion, "sleep");
+        let expected_sleep_clip = if registry.has_asset("sleep.webp") {
+            "sleep"
+        } else if registry.has_asset("tired.webp") {
+            "tired"
+        } else {
+            "sit"
+        };
+        assert_eq!(sm.active_clip_name, expected_sleep_clip);
     }
 }
