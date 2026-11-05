@@ -108,7 +108,11 @@ fn main() -> Result<()> {
         }
     }
 
-    let brain = BrainEngine::spawn(cli.model_path.clone(), emotion_registry.clone());
+    let brain = BrainEngine::spawn_with_backend(
+        cli.model_path.clone(),
+        cli.brain_backend,
+        emotion_registry.clone(),
+    );
     let mut state_machine = StateMachine::new(&emotion_registry);
     if let Some(ref initial_emotion) = cli.initial_emotion {
         if emotion_registry.get(initial_emotion).is_some() {

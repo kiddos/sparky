@@ -17,9 +17,13 @@ pub struct Cli {
     #[arg(long, default_value = "assets/animations")]
     pub animations_dir: PathBuf,
 
-    /// Path to local Gemma 3 model weights directory
+    /// Path to local Gemma 3 model weights directory or GGUF file
     #[arg(long, default_value = "models/gemma-3-270m")]
     pub model_path: PathBuf,
+
+    /// Cognitive engine backend for local inference (auto, gguf, candle)
+    #[arg(long, value_enum, default_value = "auto")]
+    pub brain_backend: crate::brain::BrainBackend,
 
     /// Target animation playback frame rate in FPS
     #[arg(long, default_value_t = 24.0)]
@@ -54,6 +58,7 @@ mod tests {
         assert_eq!(args.emotions_config, PathBuf::from("assets/emotions.toml"));
         assert_eq!(args.animations_dir, PathBuf::from("assets/animations"));
         assert_eq!(args.model_path, PathBuf::from("models/gemma-3-270m"));
+        assert_eq!(args.brain_backend, crate::brain::BrainBackend::Auto);
         assert!((args.fps - 24.0).abs() < f64::EPSILON);
         assert_eq!(args.initial_emotion, None);
         assert!(!args.click_through);
@@ -79,12 +84,15 @@ mod tests {
             "--click-through",
             "--rpc-addr",
             "0.0.0.0:8080",
+            "--brain-backend",
+            "gguf",
             "--no-rpc",
         ]);
         assert!(args.profile_run);
         assert_eq!(args.emotions_config, PathBuf::from("custom_emotions.toml"));
         assert_eq!(args.animations_dir, PathBuf::from("custom_assets"));
         assert_eq!(args.model_path, PathBuf::from("custom_models"));
+        assert_eq!(args.brain_backend, crate::brain::BrainBackend::Gguf);
         assert!((args.fps - 30.0).abs() < f64::EPSILON);
         assert_eq!(args.initial_emotion.as_deref(), Some("happy"));
         assert!(args.click_through);

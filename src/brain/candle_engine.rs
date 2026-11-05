@@ -125,10 +125,10 @@ impl BrainEngine {
             }
         };
 
-        if let Some(val) = config_val.get("_sliding_window_pattern") {
-            if config_val.get("sliding_window_pattern").is_none() {
-                config_val["sliding_window_pattern"] = val.clone();
-            }
+        if let Some(val) = config_val.get("_sliding_window_pattern")
+            && config_val.get("sliding_window_pattern").is_none()
+        {
+            config_val["sliding_window_pattern"] = val.clone();
         }
 
         let config: Gemma3Config = match serde_json::from_value(config_val) {
