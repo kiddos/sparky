@@ -316,6 +316,7 @@ sudo pacman -S --needed \
 | **Lint Check** | `cargo clippy --all-targets` | Checks for idioms and anti-patterns. |
 | **Format Check** | `cargo fmt --check` | Enforces Rust formatting standards. |
 | **Run Desktop Pet** | `cargo run --release` | Launches Sparky on desktop. |
+| **Package AppImage** | `./scripts/package_appimage.sh --test` | Packages standalone AppImage bundle and runs validation tests. |
 | **Benchmark / Profile Run** | `cargo run --release -- --profile-run` | Runs 10s automated session, reporting FPS, CPU%, and peak RAM. |
 
 ### 5.3. Asset Preparation & Model Setup
