@@ -111,7 +111,7 @@ sparky/
 │   └── chroma.frag                 # CbCr chrominance distance keyer with green despill & emotion tint
 │
 ├── scripts/
-│   ├── download_gemma3_gguf.sh     # Downloader for Gemma 3 270M Q4_K_M GGUF (~165MB)
+│   ├── download_gemma3_gguf.sh     # Downloader for Gemma 3 270M Q4_K_M GGUF (~241MB)
 │   ├── download_gemma3_270m.sh     # HuggingFace downloader for Gemma 3 270M safetensors & tokenizer
 │   └── transcode_assets.sh         # ffmpeg batch pipeline converting videos/*.mp4 -> assets/animations/*.webp
 │
