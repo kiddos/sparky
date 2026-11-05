@@ -190,10 +190,10 @@ sparky/
   - Scans `assets/animations/` for available `.webp` files.
   - **Fallback Visual Resolver:** Resolves missing assets through configured `fallback` keys (e.g. `sad` falls back to `sit` with a cold blue tint `[0.80, 0.85, 1.05]`; `smirk` falls back to `naughty`).
 - [`machine.rs`](file:///home/kiddos/projects/tools/sparky/src/state/machine.rs):
-  - [`StateMachine`](file:///home/kiddos/projects/tools/sparky/src/state/machine.rs#L4-L10) manages transitions and lifecycle rules.
-  - `LoopMode::OnceThenReturn`: Plays for `duration_secs`, then returns to `return_to` (default `sit`).
-  - `LoopMode::Loop`: Loops continuously.
-  - Boredom timer: If pet sits idle without interaction for $> 180\text{ seconds}$, automatically triggers `naughty`.
+  - [`StateMachine`](file:///home/kiddos/projects/tools/sparky/src/state/machine.rs#L4-L10) manages transitions, queueing, and lifecycle rules.
+  - **Emotion Queue System:** Instead of immediately interrupting current animations, emotions are pushed into a bounded queue (`emotion_queue`). When the queue contains $\ge 3$ emotions during the next push, the last emotion in the queue is popped and replaced by the newly pushed emotion.
+  - **Animation Completion:** When the active animation cycle finishes (`advance_frame_cycle` or `duration_secs`), `on_animation_completed` consumes the next emotion from the queue (`pop_front`) and transitions to it. If the queue is empty, Sparky keeps the current emotion.
+  - Boredom timer: If pet sits idle without interaction and with an empty queue for $> 180\text{ seconds}$, automatically pushes `naughty` to the queue.
 
 #### 6. [`src/tray/`](file:///home/kiddos/projects/tools/sparky/src/tray/mod.rs)
 - [`service.rs`](file:///home/kiddos/projects/tools/sparky/src/tray/service.rs): Encapsulates system tray initialization and event loop pumping using `tray-icon`, `muda`, and GTK. Dynamically generates the "🐾 Pet Mood" submenu from all entries in `EmotionRegistry`. Generates a fallback 32x32 RGBA orange kitten icon procedurally if `assets/icons/sparky_tray.png` is not provided.
@@ -204,7 +204,7 @@ sparky/
 #### 8. [`src/rpc/`](file:///home/kiddos/projects/tools/sparky/src/rpc/mod.rs)
 - **JSON-RPC 2.0 Dual Transport Server:** Exposes a high-performance, non-blocking JSON-RPC 2.0 interface supporting both HTTP POST (with CORS headers for web/tool integration) and raw line-delimited TCP (for scripts, `nc`, and IPC) on the same port (default `127.0.0.1:6006`).
 - **GLFW Event Loop Waking:** Uses [`GlfwWakeNotifier`](file:///home/kiddos/projects/tools/sparky/src/rpc/server.rs) (`glfw.post_empty_event()`) to wake up the main thread instantly upon receiving remote commands, guaranteeing $\le 0.3\%$ idle CPU without polling.
-- **Remote Operations:** Supports controlling emotions (`sparky.set_emotion`), pet status inspection (`sparky.get_state`), visual display frame capture (`sparky.get_frame`), interactions (`sparky.pet`, `sparky.poke`), AI chat generation (`sparky.send_chat`, `sparky.get_chat_history`), window geometry & click-through (`sparky.set_position`, `sparky.set_visible`, `sparky.set_click_through`), and introspection (`rpc.discover`, `sparky.list_emotions`).
+- **Remote Operations:** Supports controlling emotions via queue (`sparky.set_emotion`), pet status inspection (`sparky.get_state`), animation cycle completion (`sparky.complete_animation`, `sparky.clear_queue`), visual display frame capture (`sparky.get_frame`), interactions (`sparky.pet`, `sparky.poke`), AI chat generation (`sparky.send_chat`, `sparky.get_chat_history`), window geometry & click-through (`sparky.set_position`, `sparky.set_visible`, `sparky.set_click_through`), and introspection (`rpc.discover`, `sparky.list_emotions`).
 - **Frame Capture & Visual Verification:** `sparky.get_frame` captures raw clip frames or rendered framebuffers as base64 PNGs with disk saving (`save_path`), allowing remote visual verification.
 - **Behavioral Test Suite ([`src/rpc/behavior_tests.rs`](file:///home/kiddos/projects/tools/sparky/src/rpc/behavior_tests.rs)):** Automated test harness driving the pet state machine, windowing, and frame decoding over persistent TCP sockets with terminal ANSI truecolor visualization.
 
