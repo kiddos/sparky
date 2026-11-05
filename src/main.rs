@@ -1,6 +1,9 @@
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+
 use anyhow::Result;
 use glfw::Context;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use sysinfo::{ProcessesToUpdate, System, get_current_pid};
@@ -29,7 +32,36 @@ const BASE_HEIGHT: u32 = 162;
 const CHAT_EXTRA_HEIGHT: u32 = 304;
 const EXPANDED_HEIGHT: u32 = BASE_HEIGHT + CHAT_EXTRA_HEIGHT;
 
+const EMBEDDED_VERT_SHADER: &str = include_str!("../shaders/quad.vert");
+const EMBEDDED_FRAG_SHADER: &str = include_str!("../shaders/chroma.frag");
+
+const EMBEDDED_CLIPS: &[(&str, &[u8])] = &[
+    ("sit", include_bytes!("../assets/animations/sit.webp")),
+    ("happy", include_bytes!("../assets/animations/happy.webp")),
+    (
+        "naughty",
+        include_bytes!("../assets/animations/naughty.webp"),
+    ),
+    ("angry", include_bytes!("../assets/animations/angry.webp")),
+    ("sad", include_bytes!("../assets/animations/sad.webp")),
+    ("smirk", include_bytes!("../assets/animations/smirk.webp")),
+    (
+        "curious",
+        include_bytes!("../assets/animations/curious.webp"),
+    ),
+    ("tired", include_bytes!("../assets/animations/tired.webp")),
+];
+
 fn main() -> Result<()> {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        extern "system" {
+            fn AttachConsole(dwProcessId: u32) -> i32;
+        }
+        const ATTACH_PARENT_PROCESS: u32 = 0xFFFFFFFF;
+        AttachConsole(ATTACH_PARENT_PROCESS);
+    }
+
     let cli = Cli::parse();
 
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info"))
@@ -46,15 +78,22 @@ fn main() -> Result<()> {
     log::info!("Initializing PetWindow (target base resolution: {BASE_WIDTH}x{BASE_HEIGHT})...");
     let mut pet_window = PetWindow::new(BASE_WIDTH, BASE_HEIGHT, "Sparky")?;
     let quad = RenderQuad::new();
-    let shader = ShaderProgram::new("shaders/quad.vert", "shaders/chroma.frag")?;
+    let shader = if std::path::Path::new("shaders/quad.vert").exists()
+        && std::path::Path::new("shaders/chroma.frag").exists()
+    {
+        ShaderProgram::new("shaders/quad.vert", "shaders/chroma.frag")?
+    } else {
+        log::info!("Shaders not found on disk; using embedded shaders");
+        ShaderProgram::from_source(EMBEDDED_VERT_SHADER, EMBEDDED_FRAG_SHADER)?
+    };
 
-    // 2. Load Declarative Emotion Registry
+    // 2. Load Declarative Emotion Registry (falls back to embedded if file not on disk)
     let emotion_registry = Arc::new(EmotionRegistry::load_from_toml(
         &cli.emotions_config,
         &cli.animations_dir,
     )?);
 
-    // 3. Load Available Animations dynamically
+    // 3. Load Available Animations dynamically from disk, then backfill with embedded clips
     log::info!("Loading animation clips from {:?}...", cli.animations_dir);
     let mut clips: HashMap<String, AnimationClip> = HashMap::new();
     if let Ok(entries) = std::fs::read_dir(&cli.animations_dir) {
@@ -75,9 +114,23 @@ fn main() -> Result<()> {
         }
     }
 
+    // Backfill missing animation clips from embedded assets
+    for (name, bytes) in EMBEDDED_CLIPS {
+        if !clips.contains_key(*name) {
+            match AnimationClip::load_from_bytes(name, bytes) {
+                Ok(clip) => {
+                    clips.insert(name.to_string(), clip);
+                }
+                Err(e) => {
+                    log::warn!("Failed to load embedded animation clip '{}': {}", name, e);
+                }
+            }
+        }
+    }
+
     if clips.is_empty() {
         log::warn!(
-            "No WebP animations loaded from {:?}! Check transcoding.",
+            "No WebP animations loaded from {:?} or embedded assets!",
             cli.animations_dir
         );
     } else {
@@ -90,9 +143,12 @@ fn main() -> Result<()> {
 
     // 4. Initialize Tray, Brain & State Machine
     log::info!("Initializing system tray service...");
-    let tray_service = match TrayService::new(&emotion_registry) {
+    let tray_service = match TrayService::from_model_path(&emotion_registry, &cli.model_path) {
         Ok(t) => {
-            log::info!("System tray service initialized.");
+            log::info!(
+                "System tray service initialized (GGUF model downloaded: {}).",
+                t.download_gguf_item.is_checked()
+            );
             Some(t)
         }
         Err(e) => {
@@ -196,6 +252,9 @@ fn main() -> Result<()> {
     shader.set_float("u_Despill", 0.85);
     shader.set_vec2("u_BorderMargin", 0.015, 0.015);
     shader.set_vec2("u_BorderFeather", 0.005, 0.005);
+
+    let (download_tx, download_rx) = crossbeam_channel::unbounded::<Result<PathBuf, String>>();
+    let mut is_downloading_gguf = false;
 
     log::info!("Application loading complete! Entering main event loop.");
 
@@ -322,26 +381,98 @@ fn main() -> Result<()> {
             }
         }
 
-        // Process Tray Menu Events
-        if let Some(ref tray) = tray_service {
-            if let Ok(menu_event) = muda::MenuEvent::receiver().try_recv() {
-                if menu_event.id == tray.show_hide_item.id() {
-                    is_visible = tray.show_hide_item.is_checked();
-                    if is_visible {
-                        pet_window.window.show();
-                    } else {
-                        pet_window.window.hide();
+        // Process GGUF model download results
+        while let Ok(result) = download_rx.try_recv() {
+            is_downloading_gguf = false;
+            match result {
+                Ok(path) => {
+                    log::info!("GGUF model downloaded successfully to {:?}", path);
+                    if let Some(ref tray) = tray_service {
+                        tray.download_gguf_item.set_text("Download GGUF Model");
+                        tray.download_gguf_item.set_checked(true);
+                        tray.download_gguf_item.set_enabled(true);
                     }
-                } else if menu_event.id == tray.chat_item.id() {
-                    chat_state.is_visible = !chat_state.is_visible;
-                } else if menu_event.id == tray.click_through_item.id() {
-                    let click_through = tray.click_through_item.is_checked();
-                    pet_window.set_click_through(click_through);
-                } else if menu_event.id == tray.quit_item.id() {
-                    pet_window.window.set_should_close(true);
-                } else if let Some(emotion_id) = tray.emotion_menu_items.get(&menu_event.id) {
-                    state_machine.push_emotion(emotion_id, &emotion_registry);
+                    if chat_state.is_visible {
+                        chat_state.messages.push((
+                            "Sparky".to_string(),
+                            "Meow! Gemma 3 GGUF model downloaded successfully!".to_string(),
+                        ));
+                    }
                 }
+                Err(err) => {
+                    log::error!("GGUF model download failed: {}", err);
+                    if let Some(ref tray) = tray_service {
+                        tray.download_gguf_item.set_text("Download GGUF Model");
+                        tray.download_gguf_item.set_checked(false);
+                        tray.download_gguf_item.set_enabled(true);
+                    }
+                    if chat_state.is_visible {
+                        chat_state.messages.push((
+                            "System".to_string(),
+                            format!("Failed to download GGUF model: {}", err),
+                        ));
+                    }
+                }
+            }
+        }
+
+        // Process Tray Menu Events
+        if let Some(ref tray) = tray_service
+            && let Ok(menu_event) = muda::MenuEvent::receiver().try_recv()
+        {
+            if menu_event.id == tray.show_hide_item.id() {
+                is_visible = tray.show_hide_item.is_checked();
+                if is_visible {
+                    pet_window.window.show();
+                } else {
+                    pet_window.window.hide();
+                }
+            } else if menu_event.id == tray.chat_item.id() {
+                chat_state.is_visible = !chat_state.is_visible;
+            } else if menu_event.id == tray.click_through_item.id() {
+                let click_through = tray.click_through_item.is_checked();
+                pet_window.set_click_through(click_through);
+            } else if menu_event.id == tray.download_gguf_item.id() {
+                let already_downloaded = brain::is_gguf_downloaded(&cli.model_path);
+                if already_downloaded {
+                    log::info!("GGUF model is already downloaded.");
+                    tray.download_gguf_item.set_checked(true);
+                } else if is_downloading_gguf {
+                    log::info!("GGUF model download is already in progress...");
+                    tray.download_gguf_item.set_checked(false);
+                } else {
+                    is_downloading_gguf = true;
+                    tray.download_gguf_item
+                        .set_text("Downloading GGUF Model...");
+                    tray.download_gguf_item.set_checked(false);
+                    tray.download_gguf_item.set_enabled(false);
+
+                    let dest_path = brain::resolve_gguf_download_path(&cli.model_path);
+                    let tx = download_tx.clone();
+                    std::thread::Builder::new()
+                        .name("gguf-downloader".to_string())
+                        .spawn(move || {
+                            log::info!(
+                                "Starting background download of GGUF model to {:?}",
+                                dest_path
+                            );
+                            let res =
+                                brain::download_gguf_model(&dest_path).map_err(|e| e.to_string());
+                            let _ = tx.send(res);
+                        })
+                        .expect("Failed to spawn downloader thread");
+
+                    if chat_state.is_visible {
+                        chat_state.messages.push((
+                            "System".to_string(),
+                            "Downloading Gemma 3 270M GGUF model in the background...".to_string(),
+                        ));
+                    }
+                }
+            } else if menu_event.id == tray.quit_item.id() {
+                pet_window.window.set_should_close(true);
+            } else if let Some(emotion_id) = tray.emotion_menu_items.get(&menu_event.id) {
+                state_machine.push_emotion(emotion_id, &emotion_registry);
             }
         }
 

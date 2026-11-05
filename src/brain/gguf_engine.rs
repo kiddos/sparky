@@ -52,7 +52,7 @@ impl BrainEngine {
                 while let Ok(request) = req_rx.recv() {
                     match request {
                         BrainRequest::Chat { prompt, max_tokens } => {
-                            if !load_attempted {
+                            if !load_attempted || loaded_brain.is_none() {
                                 loaded_brain = Self::try_load_model(&model_path);
                                 load_attempted = true;
                             }

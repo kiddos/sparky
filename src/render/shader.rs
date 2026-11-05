@@ -8,6 +8,40 @@ pub struct ShaderProgram {
 }
 
 impl ShaderProgram {
+    /// Compiles and links shaders directly from in-memory string slices
+    pub fn from_source(vert_src: &str, frag_src: &str) -> Result<Self> {
+        let vert_shader = Self::compile_shader(vert_src, gl::VERTEX_SHADER, "embedded:quad.vert")?;
+        let frag_shader =
+            Self::compile_shader(frag_src, gl::FRAGMENT_SHADER, "embedded:chroma.frag")?;
+
+        let id = unsafe { gl::CreateProgram() };
+        unsafe {
+            gl::AttachShader(id, vert_shader);
+            gl::AttachShader(id, frag_shader);
+            gl::LinkProgram(id);
+
+            let mut success = 0;
+            gl::GetProgramiv(id, gl::LINK_STATUS, &mut success);
+            if success == 0 {
+                let mut len = 0;
+                gl::GetProgramiv(id, gl::INFO_LOG_LENGTH, &mut len);
+                let mut buffer = vec![0u8; len as usize];
+                gl::GetProgramInfoLog(id, len, ptr::null_mut(), buffer.as_mut_ptr() as *mut i8);
+                let error_msg = String::from_utf8_lossy(&buffer);
+                gl::DeleteShader(vert_shader);
+                gl::DeleteShader(frag_shader);
+                gl::DeleteProgram(id);
+                bail!("Failed to link shader program: {}", error_msg);
+            }
+
+            gl::DeleteShader(vert_shader);
+            gl::DeleteShader(frag_shader);
+        }
+
+        log::info!("Shader program successfully linked from source (Program ID: {id})");
+        Ok(Self { id })
+    }
+
     pub fn new(vert_path: &str, frag_path: &str) -> Result<Self> {
         log::info!("Compiling shader program (vertex: '{vert_path}', fragment: '{frag_path}')");
         let vert_src = fs::read_to_string(vert_path)

@@ -137,6 +137,169 @@ impl BrainEngine {
     }
 }
 
+/// Default GGUF filename for Gemma 3 270M Q4_K_M
+pub const GEMMA3_GGUF_FILENAME: &str = "gemma-3-270m-it-q4_k_m.gguf";
+
+/// Alternative upstream Hugging Face filename (uppercase Q4_K_M)
+pub const GEMMA3_GGUF_UPSTREAM_FILENAME: &str = "gemma-3-270m-it-Q4_K_M.gguf";
+
+/// Hugging Face repository containing Gemma 3 GGUF models
+pub const GEMMA3_GGUF_REPO: &str = "google/gemma-3-270m-it-GGUF";
+
+/// Direct Hugging Face download URL for Gemma 3 270M Q4_K_M GGUF
+pub const GEMMA3_GGUF_DIRECT_URL: &str =
+    "https://huggingface.co/google/gemma-3-270m-it-GGUF/resolve/main/gemma-3-270m-it-Q4_K_M.gguf";
+
+/// Finds the path to the GGUF model file if it exists on disk.
+pub fn find_gguf_model(model_path: &Path) -> Option<PathBuf> {
+    if model_path.is_file() {
+        if let Some(ext) = model_path.extension().and_then(|s| s.to_str())
+            && ext.eq_ignore_ascii_case("gguf")
+            && model_path.exists()
+        {
+            return Some(model_path.to_path_buf());
+        }
+    } else if model_path.is_dir() {
+        // Look for any .gguf file in the directory
+        if let Ok(entries) = std::fs::read_dir(model_path) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if let Some(ext) = p.extension().and_then(|s| s.to_str())
+                    && ext.eq_ignore_ascii_case("gguf")
+                    && p.is_file()
+                {
+                    return Some(p);
+                }
+            }
+        }
+        // Also check standard filenames directly
+        let candidate1 = model_path.join(GEMMA3_GGUF_FILENAME);
+        if candidate1.is_file() {
+            return Some(candidate1);
+        }
+        let candidate2 = model_path.join(GEMMA3_GGUF_UPSTREAM_FILENAME);
+        if candidate2.is_file() {
+            return Some(candidate2);
+        }
+    }
+
+    // Check standard default locations
+    let default_path1 = Path::new("models/gemma-3-270m").join(GEMMA3_GGUF_FILENAME);
+    if default_path1.is_file() {
+        return Some(default_path1);
+    }
+    let default_path2 = Path::new("models/gemma-3-270m").join(GEMMA3_GGUF_UPSTREAM_FILENAME);
+    if default_path2.is_file() {
+        return Some(default_path2);
+    }
+
+    None
+}
+
+/// Checks if the GGUF model has already been downloaded.
+pub fn is_gguf_downloaded(model_path: &Path) -> bool {
+    find_gguf_model(model_path).is_some()
+}
+
+/// Resolves the file destination path where the GGUF model should be saved.
+pub fn resolve_gguf_download_path(model_path: &Path) -> PathBuf {
+    if let Some(ext) = model_path.extension().and_then(|s| s.to_str())
+        && ext.eq_ignore_ascii_case("gguf")
+    {
+        return model_path.to_path_buf();
+    }
+    model_path.join(GEMMA3_GGUF_FILENAME)
+}
+
+/// Downloads the Gemma 3 270M GGUF model to the specified destination path.
+pub fn download_gguf_model(dest_path: &Path) -> anyhow::Result<PathBuf> {
+    if let Some(parent) = dest_path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+
+    // 1. Try existing scripts/download_gemma3_gguf.sh if present
+    let script = Path::new("scripts/download_gemma3_gguf.sh");
+    if script.is_file() {
+        log::info!(
+            "Attempting GGUF download via {:?} -> {:?}",
+            script,
+            dest_path
+        );
+        let status = std::process::Command::new("bash")
+            .arg(script)
+            .arg(dest_path)
+            .status();
+        if let Ok(st) = status
+            && st.success()
+            && dest_path.is_file()
+        {
+            log::info!("GGUF model downloaded successfully via download script.");
+            return Ok(dest_path.to_path_buf());
+        }
+    }
+
+    // 2. Try huggingface-cli
+    if let Some(parent) = dest_path.parent() {
+        log::info!("Attempting GGUF download via huggingface-cli...");
+        let status = std::process::Command::new("huggingface-cli")
+            .arg("download")
+            .arg(GEMMA3_GGUF_REPO)
+            .arg(GEMMA3_GGUF_UPSTREAM_FILENAME)
+            .arg("--local-dir")
+            .arg(parent)
+            .status();
+        if let Ok(st) = status
+            && st.success()
+        {
+            let downloaded = parent.join(GEMMA3_GGUF_UPSTREAM_FILENAME);
+            if downloaded.is_file() && downloaded != dest_path {
+                let _ = std::fs::rename(&downloaded, dest_path);
+            }
+            if dest_path.is_file() {
+                return Ok(dest_path.to_path_buf());
+            }
+        }
+    }
+
+    // 3. Try curl
+    log::info!("Attempting GGUF download via curl to {:?}...", dest_path);
+    let status = std::process::Command::new("curl")
+        .arg("-f")
+        .arg("-L")
+        .arg(GEMMA3_GGUF_DIRECT_URL)
+        .arg("-o")
+        .arg(dest_path)
+        .status();
+    if let Ok(st) = status
+        && st.success()
+        && dest_path.is_file()
+    {
+        log::info!("GGUF model downloaded successfully via curl.");
+        return Ok(dest_path.to_path_buf());
+    }
+
+    // 4. Try wget
+    log::info!("Attempting GGUF download via wget to {:?}...", dest_path);
+    let status = std::process::Command::new("wget")
+        .arg("-O")
+        .arg(dest_path)
+        .arg(GEMMA3_GGUF_DIRECT_URL)
+        .status();
+    if let Ok(st) = status
+        && st.success()
+        && dest_path.is_file()
+    {
+        log::info!("GGUF model downloaded successfully via wget.");
+        return Ok(dest_path.to_path_buf());
+    }
+
+    anyhow::bail!(
+        "Failed to download GGUF model to {}. Please download manually from {}",
+        dest_path.display(),
+        GEMMA3_GGUF_DIRECT_URL
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -237,5 +400,35 @@ mod tests {
         );
         assert_eq!(completed_action, Some("sad".to_string()));
         brain.shutdown();
+    }
+
+    #[test]
+    fn test_gguf_detection_and_path_resolution() {
+        let temp_dir =
+            std::env::temp_dir().join(format!("sparky_test_gguf_{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&temp_dir);
+        std::fs::create_dir_all(&temp_dir).unwrap();
+
+        // 1. Empty directory -> not downloaded
+        assert!(!is_gguf_downloaded(&temp_dir));
+        assert_eq!(find_gguf_model(&temp_dir), None);
+
+        // 2. Resolve download path
+        let resolved = resolve_gguf_download_path(&temp_dir);
+        assert_eq!(resolved, temp_dir.join(GEMMA3_GGUF_FILENAME));
+
+        let direct_path = temp_dir.join("my_model.gguf");
+        assert_eq!(resolve_gguf_download_path(&direct_path), direct_path);
+
+        // 3. Create dummy .gguf file in temp_dir
+        std::fs::write(&resolved, b"dummy gguf content").unwrap();
+        assert!(is_gguf_downloaded(&temp_dir));
+        assert_eq!(find_gguf_model(&temp_dir), Some(resolved.clone()));
+
+        // 4. Test direct file path
+        assert!(is_gguf_downloaded(&resolved));
+        assert_eq!(find_gguf_model(&resolved), Some(resolved));
+
+        let _ = std::fs::remove_dir_all(&temp_dir);
     }
 }
