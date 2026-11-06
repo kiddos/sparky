@@ -51,14 +51,16 @@ const EMBEDDED_CLIPS: &[(&str, &[u8])] = &[
     ("tired", include_bytes!("../assets/animations/tired.webp")),
 ];
 
+#[cfg(target_os = "windows")]
+unsafe extern "system" {
+    fn AttachConsole(dwProcessId: u32) -> i32;
+}
+
 fn main() -> Result<()> {
     #[cfg(target_os = "windows")]
     unsafe {
-        extern "system" {
-            fn AttachConsole(dwProcessId: u32) -> i32;
-        }
         const ATTACH_PARENT_PROCESS: u32 = 0xFFFFFFFF;
-        AttachConsole(ATTACH_PARENT_PROCESS);
+        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
     }
 
     let cli = Cli::parse();
