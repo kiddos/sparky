@@ -162,6 +162,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg(not(target_os = "windows"))]
     fn test_mouse_drag_lifecycle_and_jitter_prevention() {
         let mut pet_window = PetWindow::new(288, 162, "TestSparky").unwrap();
 

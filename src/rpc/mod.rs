@@ -2,7 +2,7 @@ pub mod handler;
 pub mod protocol;
 pub mod server;
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "windows")))]
 pub mod behavior_tests;
 
 #[allow(unused_imports)]

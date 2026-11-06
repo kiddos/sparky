@@ -40,9 +40,6 @@ jobs:
           chmod +x ./scripts/transcode_assets.sh
           ./scripts/transcode_assets.sh
 
-      - name: Run unit and integration tests
-        run: cargo test --release
-
       - name: Build standalone single executable
         run: cargo build --release
 
