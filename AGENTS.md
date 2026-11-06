@@ -124,7 +124,7 @@ sparky/
     │   └── pacer.rs                # High-precision frame timing, delay calculation, and frame index stepping
     │
     ├── brain/
-    │   ├── mod.rs                  # Unified brain interface, BrainBackend (Auto, Gguf, Candle), auto-detection
+    │   ├── mod.rs                  # Unified brain interface, BrainBackend, pure-Rust GGUF downloader (ureq), verification
     │   ├── gguf_engine.rs          # Low-RAM GGUF inference engine via llama-cpp-2 (Q4_K_M, mmap, sampler)
     │   ├── candle_engine.rs        # Candle transformer engine (safetensors full-precision) & fallback
     │   └── prompt.rs               # Dynamic system prompt generation from registry, <action> tag extraction
@@ -180,6 +180,11 @@ sparky/
 - [`prompt.rs`](file:///home/kiddos/projects/tools/sparky/src/brain/prompt.rs):
   - Dynamically builds Gemma chat formatting (`<start_of_turn>system...`) from [`EmotionRegistry::active_emotions()`](file:///home/kiddos/projects/tools/sparky/src/state/emotion.rs#L118-L120).
   - Extracts and strips `<action>([a-z0-9_-]+)</action>` tags from model output to trigger state transitions without displaying raw tags in dialogue.
+- [`mod.rs`](file:///home/kiddos/projects/tools/sparky/src/brain/mod.rs):
+  - **Pure Rust GGUF Downloader:** `download_gguf_model_from_urls_with_progress` implements self-contained model downloads using `ureq` (with `rustls` + `webpki-roots`). Completely eliminates external shell scripts (`download_gemma3_gguf.sh`), `curl`, `wget`, or `huggingface-cli`.
+  - **Mirror Fallback:** Automatically tries primary mirror (`unsloth/gemma-3-270m-it-GGUF`) and seamlessly falls back to secondary mirror (`bartowski/google_gemma-3-270m-it-GGUF`) if HTTP errors occur. Supports `HF_TOKEN` / `HUGGING_FACE_HUB_TOKEN` bearer auth.
+  - **Integrity Verification:** Streams to `.part.<pid>` temporary file; enforces $\ge 50\text{ MB}$ file size and validates the 4-byte `b"GGUF"` magic header before atomically renaming to destination.
+  - **Channel Progress Stream:** Emits `DownloadProgressEvent::Progress` and `Completed` to update UI and tray without main thread blocking.
 
 #### 4. [`src/render/`](file:///home/kiddos/projects/tools/sparky/src/render/mod.rs)
 - [`mod.rs`](file:///home/kiddos/projects/tools/sparky/src/render/mod.rs): Configures GLFW window hints for borderless (`Decorated(false)`), floating (`Floating(true)`), transparent (`TransparentFramebuffer(true)`), unresizable (`Resizable(false)`) rendering. Implements displacement-compensated, jitter-free mouse dragging tracking `current_pos`, synchronized `set_pos` / `get_pos`, focus-loss drag cancellation, and click-through mode.
@@ -199,6 +204,7 @@ sparky/
 
 #### 6. [`src/tray/`](file:///home/kiddos/projects/tools/sparky/src/tray/mod.rs)
 - [`service.rs`](file:///home/kiddos/projects/tools/sparky/src/tray/service.rs): Encapsulates system tray initialization and event loop pumping using `tray-icon`, `muda`, and GTK. Dynamically generates the "🐾 Pet Mood" submenu from all entries in `EmotionRegistry`. Includes a "Download GGUF Model" `CheckMenuItem` reflecting whether local Gemma 3 GGUF weights are present (checked when downloaded, triggers background asynchronous download when clicked while un-downloaded). Generates a fallback 32x32 RGBA orange kitten icon procedurally if `assets/icons/sparky_tray.png` is not provided.
+  - **Live Download Progress:** During background model downloads, `download_gguf_item` is temporarily disabled and updates text dynamically to show percentage progress (`Downloading GGUF Model (X%)...`). On completion, re-enables as checked (`[x]`) and appends a status message to chat.
 
 #### 7. [`src/ui/`](file:///home/kiddos/projects/tools/sparky/src/ui/mod.rs)
 - [`chat_window.rs`](file:///home/kiddos/projects/tools/sparky/src/ui/chat_window.rs): Immediate-mode chat panel with conversation history, current mood badge (`[😺 Happy]`, `[😏 Smirk]`), thinking indicator, and dynamic suggestion chips derived directly from `EmotionRegistry`.
@@ -330,7 +336,12 @@ Whenever new clips are added to `videos/*.mp4`:
 ```
 This downscales clips to $384 \times 216$ at 24 FPS with lossless WebP compression into `assets/animations/`.
 
-#### 2. Download Gemma 3 270M Model Weights (Optional)
+#### 2. Download Gemma 3 270M GGUF Model Weights (Recommended)
+To enable local GGUF inference with minimal RAM (~241 MB):
+1. **In-App via System Tray:** Click **"Download GGUF Model"** in the tray menu. Sparky downloads and verifies the model natively in the background with real-time percentage progress in the tray.
+2. **CLI / Script Fallback:** You can also run `./scripts/download_gemma3_gguf.sh` if downloading manually outside Sparky.
+
+#### 3. Download Gemma 3 270M Safetensors (Candle Full-Precision)
 To enable real local LLM inference instead of the built-in fallback:
 ```bash
 ./scripts/download_gemma3_270m.sh models/gemma-3-270m
