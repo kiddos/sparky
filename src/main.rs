@@ -3,7 +3,6 @@
 use anyhow::Result;
 use glfw::Context;
 use std::collections::HashMap;
-use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Instant;
 use sysinfo::{ProcessesToUpdate, System, get_current_pid};
@@ -253,7 +252,7 @@ fn main() -> Result<()> {
     shader.set_vec2("u_BorderMargin", 0.015, 0.015);
     shader.set_vec2("u_BorderFeather", 0.005, 0.005);
 
-    let (download_tx, download_rx) = crossbeam_channel::unbounded::<Result<PathBuf, String>>();
+    let (download_tx, download_rx) = crossbeam_channel::unbounded::<brain::DownloadProgressEvent>();
     let mut is_downloading_gguf = false;
 
     log::info!("Application loading complete! Entering main event loop.");
@@ -381,37 +380,51 @@ fn main() -> Result<()> {
             }
         }
 
-        // Process GGUF model download results
-        while let Ok(result) = download_rx.try_recv() {
-            is_downloading_gguf = false;
-            match result {
-                Ok(path) => {
+        // Process GGUF model download results & progress
+        while let Ok(event) = download_rx.try_recv() {
+            match event {
+                brain::DownloadProgressEvent::Progress { downloaded, total } => {
+                    if let Some(ref tray) = tray_service {
+                        let text = match total {
+                            Some(tot) if tot > 0 => {
+                                let pct = ((downloaded as f64 / tot as f64) * 100.0)
+                                    .clamp(0.0, 100.0)
+                                    as u32;
+                                format!("Downloading GGUF Model ({}%)...", pct)
+                            }
+                            _ => {
+                                let mb = downloaded as f64 / (1024.0 * 1024.0);
+                                format!("Downloading GGUF Model ({:.1} MB)...", mb)
+                            }
+                        };
+                        tray.download_gguf_item.set_text(text);
+                    }
+                }
+                brain::DownloadProgressEvent::Completed(Ok(path)) => {
+                    is_downloading_gguf = false;
                     log::info!("GGUF model downloaded successfully to {:?}", path);
                     if let Some(ref tray) = tray_service {
                         tray.download_gguf_item.set_text("Download GGUF Model");
                         tray.download_gguf_item.set_checked(true);
                         tray.download_gguf_item.set_enabled(true);
                     }
-                    if chat_state.is_visible {
-                        chat_state.messages.push((
-                            "Sparky".to_string(),
-                            "Meow! Gemma 3 GGUF model downloaded successfully!".to_string(),
-                        ));
-                    }
+                    chat_state.messages.push((
+                        "Sparky".to_string(),
+                        "Meow! Gemma 3 GGUF model downloaded successfully!".to_string(),
+                    ));
                 }
-                Err(err) => {
+                brain::DownloadProgressEvent::Completed(Err(err)) => {
+                    is_downloading_gguf = false;
                     log::error!("GGUF model download failed: {}", err);
                     if let Some(ref tray) = tray_service {
                         tray.download_gguf_item.set_text("Download GGUF Model");
                         tray.download_gguf_item.set_checked(false);
                         tray.download_gguf_item.set_enabled(true);
                     }
-                    if chat_state.is_visible {
-                        chat_state.messages.push((
-                            "System".to_string(),
-                            format!("Failed to download GGUF model: {}", err),
-                        ));
-                    }
+                    chat_state.messages.push((
+                        "System".to_string(),
+                        format!("Failed to download GGUF model: {}", err),
+                    ));
                 }
             }
         }
@@ -443,7 +456,7 @@ fn main() -> Result<()> {
                 } else {
                     is_downloading_gguf = true;
                     tray.download_gguf_item
-                        .set_text("Downloading GGUF Model...");
+                        .set_text("Downloading GGUF Model (0%)...");
                     tray.download_gguf_item.set_checked(false);
                     tray.download_gguf_item.set_enabled(false);
 
@@ -456,18 +469,25 @@ fn main() -> Result<()> {
                                 "Starting background download of GGUF model to {:?}",
                                 dest_path
                             );
-                            let res =
-                                brain::download_gguf_model(&dest_path).map_err(|e| e.to_string());
-                            let _ = tx.send(res);
+                            let tx_prog = tx.clone();
+                            let res = brain::download_gguf_model_with_progress(
+                                &dest_path,
+                                move |downloaded, total| {
+                                    let _ = tx_prog.send(brain::DownloadProgressEvent::Progress {
+                                        downloaded,
+                                        total,
+                                    });
+                                },
+                            )
+                            .map_err(|e| e.to_string());
+                            let _ = tx.send(brain::DownloadProgressEvent::Completed(res));
                         })
                         .expect("Failed to spawn downloader thread");
 
-                    if chat_state.is_visible {
-                        chat_state.messages.push((
-                            "System".to_string(),
-                            "Downloading Gemma 3 270M GGUF model in the background...".to_string(),
-                        ));
-                    }
+                    chat_state.messages.push((
+                        "System".to_string(),
+                        "Downloading Gemma 3 270M GGUF model in the background...".to_string(),
+                    ));
                 }
             } else if menu_event.id == tray.quit_item.id() {
                 pet_window.window.set_should_close(true);
