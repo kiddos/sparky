@@ -10,6 +10,7 @@ use sysinfo::{ProcessesToUpdate, System, get_current_pid};
 mod animation;
 mod brain;
 mod cli;
+mod platform;
 mod render;
 mod rpc;
 mod state;
@@ -51,17 +52,8 @@ const EMBEDDED_CLIPS: &[(&str, &[u8])] = &[
     ("tired", include_bytes!("../assets/animations/tired.webp")),
 ];
 
-#[cfg(target_os = "windows")]
-unsafe extern "system" {
-    fn AttachConsole(dwProcessId: u32) -> i32;
-}
-
 fn main() -> Result<()> {
-    #[cfg(target_os = "windows")]
-    unsafe {
-        const ATTACH_PARENT_PROCESS: u32 = 0xFFFFFFFF;
-        let _ = AttachConsole(ATTACH_PARENT_PROCESS);
-    }
+    platform::init_platform();
 
     let cli = Cli::parse();
 
