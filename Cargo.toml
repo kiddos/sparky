@@ -1,6 +1,6 @@
 [package]
 name = "sparky"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2024"
 authors = ["Sparky Desktop Pet Developers"]
 description = "Ultra-low-resource hardware-accelerated desktop pet powered by Gemma 3 270M"
