@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/Rust-2024_Edition-orange?logo=rust" alt="Rust 2024" />
   <img src="https://img.shields.io/badge/OpenGL-3.3_Core-blue?logo=opengl" alt="OpenGL 3.3 Core" />
   <img src="https://img.shields.io/badge/Gemma_3-270M_IT-purple?logo=google" alt="Gemma 3 270M IT" />
-  <img src="https://img.shields.io/badge/Inference-HuggingFace_Candle-yellow" alt="Candle" />
+  <img src="https://img.shields.io/badge/Inference-llama.cpp_GGUF-yellow" alt="llama.cpp" />
   <img src="https://img.shields.io/badge/JSON--RPC-2.0_(HTTP_+_TCP)-brightgreen" alt="JSON-RPC 2.0" />
   <img src="https://img.shields.io/badge/Platform-Linux_(X11_/_XWayland)-lightgrey?logo=linux" alt="Linux" />
 </p>
@@ -22,7 +22,7 @@
 Unlike typical Electron or web-wrapper desktop pets that consume hundreds of megabytes of memory and trigger continuous CPU interrupts, Sparky is built from scratch in pure **Rust** with strict systems engineering principles:
 
 1. **Direct GPU Chroma Keying:** Pre-rendered video animations on green-screen backgrounds are keyed out on the GPU in a single pass using a custom GLSL fragment shader (`shaders/chroma.frag`), completely bypassing CPU alpha decompression and software blitting.
-2. **Local Embedded Cognition:** Powered by an embedded **Google Gemma 3 270M Instruction-Tuned (IT)** language model running locally on CPU via Hugging Face Candle. When weights are absent, a deterministic rule-based feline personality engine activates as a zero-dependency fallback.
+2. **Local Embedded Cognition:** Powered by an embedded **Google Gemma 3 270M Instruction-Tuned (IT)** language model running locally on CPU via llama.cpp GGUF quantization. When weights are absent, a deterministic rule-based feline personality engine activates as a zero-dependency fallback.
 3. **Data-Driven Emotion Architecture:** Behavior, loop modes, visual assets, fallback chains, and shader tints are declared dynamically in [`assets/emotions.toml`](assets/emotions.toml).
 4. **Zero-Overhead Ambient Pacing:** Frame pacing strictly matches the 24 FPS animation rate, using `glfw.wait_events_timeout()` to sleep the main thread between frames, maintaining $\le 0.3\%$ idle CPU.
 5. **Dual-Transport JSON-RPC 2.0 API:** Full remote automation and testing interface over both HTTP POST (with CORS) and raw TCP stream on port `6006`, powered by a GLFW wake notifier that maintains $\le 0.3\%$ CPU even during active listener standby.
@@ -78,11 +78,11 @@ flowchart TD
     end
 
     subgraph Brain_Worker ["Background Cognition Thread: sparky-brain"]
-        CANDLE[Candle Gemma 3 270M Engine]
+        GGUF[llama.cpp Gemma 3 270M GGUF Engine]
         PROMPT[Dynamic Prompt & Action Parser]
         FALLBACK[Deterministic Rule-Based Personality Fallback]
         
-        CANDLE --> PROMPT
+        GGUF --> PROMPT
         FALLBACK --> PROMPT
     end
 
@@ -149,10 +149,10 @@ This downscales the MP4 videos into $384 \times 216$ 24 FPS WebP animations opti
 Sparky includes an instant deterministic feline personality engine out of the box. To enable local generative inference via **Google Gemma 3 270M IT**:
 
 ```bash
-./scripts/download_gemma3_270m.sh models/gemma-3-270m
+./scripts/download_gemma3_gguf.sh models/gemma-3-270m
 ```
 
-*(Requires `huggingface-cli` or `python3 -m pip install huggingface_hub`).*
+*(Alternatively, click "Download GGUF Model" from Sparky's system tray menu).*
 
 ### 4. Build & Run
 
@@ -372,7 +372,7 @@ sparky/
 │   └── chroma.frag             # CbCr chrominance distance keyer with despill & emotion tint
 │
 ├── scripts/
-│   ├── download_gemma3_270m.sh # Downloader for Gemma 3 270M safetensors and tokenizer
+│   ├── download_gemma3_gguf.sh # Downloader for Gemma 3 270M Q4_K_M GGUF model
 │   ├── transcode_assets.sh     # ffmpeg batch transcoding pipeline (MP4 -> WebP)
 │   └── package_appimage.sh     # Automated Linux AppImage packaging & validation tool
 │
@@ -380,7 +380,7 @@ sparky/
     ├── main.rs                 # Event loop, OpenGL context, window geometry & compositor
     ├── cli.rs                  # Clap command-line interface arguments & parser tests
     ├── animation/              # WebP decoding into raw RGB24 frames & 24 FPS frame pacer
-    ├── brain/                  # Candle Gemma 3 270M local inference & rule-based fallback
+    ├── brain/                  # Gemma 3 270M GGUF local inference & rule-based fallback
     ├── render/                 # GLFW windowing, transparent quad VAO/VBO & GLSL shader manager
     ├── rpc/                    # JSON-RPC 2.0 dual HTTP/TCP server & behavioral test suite
     ├── state/                  # Declarative emotion registry & state transition machine

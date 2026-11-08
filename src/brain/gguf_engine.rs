@@ -222,27 +222,15 @@ struct LoadedBrain {
 
 impl LoadedBrain {
     fn load(model_path: &Path) -> Option<Self> {
-        let target_path = if model_path.is_dir() {
-            // Check for *.gguf files in directory
-            let mut gguf_path = None;
-            if let Ok(entries) = std::fs::read_dir(model_path) {
-                for entry in entries.flatten() {
-                    let p = entry.path();
-                    if p.extension().and_then(|ext| ext.to_str()) == Some("gguf") {
-                        gguf_path = Some(p);
-                        break;
-                    }
-                }
+        let target_path = match crate::brain::find_gguf_model(model_path) {
+            Some(path) => path,
+            None => {
+                log::info!(
+                    "GGUF model file not found at {:?}. Running with embedded cognitive fallback.",
+                    model_path
+                );
+                return None;
             }
-            gguf_path?
-        } else if model_path.exists() {
-            model_path.to_path_buf()
-        } else {
-            log::info!(
-                "GGUF model file not found at {:?}. Running with embedded cognitive fallback.",
-                model_path
-            );
-            return None;
         };
 
         log::info!("Initializing llama.cpp backend...");

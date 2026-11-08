@@ -21,15 +21,8 @@ muda = "0.15"
 ureq = "3.5"
 
 # Local AI & Machine Learning Engines
-# 1. GGUF Quantized Inference via llama.cpp (low RAM footprint)
+# GGUF Quantized Inference via llama.cpp (low RAM footprint)
 llama-cpp-2 = { version = "0.1.161", features = ["sampler"] }
-
-# 2. Candle Transformer Engine (full-precision safetensors)
-candle-core = { version = "0.8" }
-candle-nn = { version = "0.8" }
-candle-transformers = { version = "0.8" }
-tokenizers = { version = "0.21", default-features = false, features = ["onig"] }
-safetensors = "0.5"
 
 # Immediate-Mode Chat UI
 egui = "0.31"

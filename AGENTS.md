@@ -4,7 +4,7 @@
 > **Repository Root:** `/home/kiddos/projects/tools/sparky`  
 > **Language & Edition:** Rust 2024 (`rustc 1.99+`)  
 > **Graphics Stack:** OpenGL 3.3 Core, GLFW (`glfw = "0.59"`, `gl = "0.14"`)  
-> **Cognition Engine:** Google Gemma 3 270M IT (`google/gemma-3-270m-it`) via llama.cpp GGUF (`llama-cpp-2 = "0.1.161"`, low RAM) & Hugging Face Candle (`candle-core = "0.8"`)  
+> **Cognition Engine:** Google Gemma 3 270M IT (`google/gemma-3-270m-it`) via llama.cpp GGUF (`llama-cpp-2 = "0.1.161"`, low RAM footprint)  
 > **GUI & System Integration:** Immediate-mode `egui` (`0.31`), `egui_gl_glfw` (`0.1.13`), `tray-icon` (`0.19`), `muda` (`0.15`), GTK 3 (`gtk = "0.18"`)  
 > **Target OS:** Linux (X11 / XWayland), cross-platform extensible to macOS & Windows  
 
@@ -16,7 +16,7 @@ Sparky is an ambient, ultra-low-resource hardware-accelerated desktop companion 
 
 Unlike typical Electron or web-wrapper desktop pets that consume hundreds of megabytes of memory and trigger continuous CPU interrupts, Sparky is built with strict systems engineering principles:
 1. **Direct GPU Chroma Keying:** Pre-rendered video frames with green-screen backgrounds are keyed out on the GPU in a single pass using a custom GLSL fragment shader (`shaders/chroma.frag`), completely bypassing CPU alpha decompression and software blitting.
-2. **Local Embedded Cognition:** Powered by an embedded Google Gemma 3 270M Instruction-Tuned (IT) language model running locally on CPU/AVX2 via Hugging Face Candle. When model weights are absent, a deterministic rule-based feline personality engine activates as a zero-dependency fallback.
+2. **Local Embedded Cognition:** Powered by an embedded Google Gemma 3 270M Instruction-Tuned (IT) language model running locally on CPU/AVX2 via llama.cpp GGUF quantization. When model weights are absent, a deterministic rule-based feline personality engine activates as a zero-dependency fallback.
 3. **Data-Driven Emotion Architecture:** Behavior, loop modes, visual assets, fallback chains, and shader tints are declared dynamically in [`assets/emotions.toml`](file:///home/kiddos/projects/tools/sparky/assets/emotions.toml). No enum hardcoding is required to extend Sparky's emotional vocabulary.
 4. **Zero-Overhead Ambient Pacing:** Frame pacing matches the source 24 FPS animation rate, using `glfw.wait_events_timeout()` to sleep the main thread between frames and achieve $< 0.3\%$ idle CPU.
 
@@ -54,11 +54,11 @@ flowchart TD
     end
 
     subgraph Brain_Worker ["Background Cognition Thread: sparky-brain"]
-        CANDLE[Candle Gemma 3 270M Engine]
+        GGUF[llama.cpp Gemma 3 270M GGUF Engine]
         PROMPT[Dynamic Prompt & Action Parser]
         FALLBACK[Deterministic Rule-Based Personality Fallback]
         
-        CANDLE --> PROMPT
+        GGUF --> PROMPT
         FALLBACK --> PROMPT
     end
 
@@ -112,7 +112,6 @@ sparky/
 │
 ├── scripts/
 │   ├── download_gemma3_gguf.sh     # Downloader for Gemma 3 270M Q4_K_M GGUF (~241MB)
-│   ├── download_gemma3_270m.sh     # HuggingFace downloader for Gemma 3 270M safetensors & tokenizer
 │   └── transcode_assets.sh         # ffmpeg batch pipeline converting videos/*.mp4 -> assets/animations/*.webp
 │
 └── src/
@@ -126,7 +125,6 @@ sparky/
     ├── brain/
     │   ├── mod.rs                  # Unified brain interface, BrainBackend, pure-Rust GGUF downloader (ureq), verification
     │   ├── gguf_engine.rs          # Low-RAM GGUF inference engine via llama-cpp-2 (Q4_K_M, mmap, sampler)
-    │   ├── candle_engine.rs        # Candle transformer engine (safetensors full-precision) & fallback
     │   └── prompt.rs               # Dynamic system prompt generation from registry, <action> tag extraction
     │
     ├── render/
@@ -172,11 +170,11 @@ sparky/
 - [`pacer.rs`](file:///home/kiddos/projects/tools/sparky/src/animation/pacer.rs): [`FramePacer`](file:///home/kiddos/projects/tools/sparky/src/animation/pacer.rs#L3-L9) tracks frame intervals ($1.0 / 24.0 \approx 41.66\text{ ms}$). `time_until_next_frame()` supplies the exact duration for `glfw.wait_events_timeout()` to eliminate CPU spinning.
 
 #### 3. [`src/brain/`](file:///home/kiddos/projects/tools/sparky/src/brain/mod.rs)
-- [`candle_engine.rs`](file:///home/kiddos/projects/tools/sparky/src/brain/candle_engine.rs):
-  - Spawns a dedicated thread (`sparky-brain`) receiving [`BrainRequest`](file:///home/kiddos/projects/tools/sparky/src/brain/candle_engine.rs#L15-L20) and sending [`BrainResponse`](file:///home/kiddos/projects/tools/sparky/src/brain/candle_engine.rs#L22-L30) via crossbeam channels.
-  - **Lazy Model Loading:** Defers loading weights into memory until the first chat prompt is sent.
-  - **Gemma 3 Architecture:** Uses `candle_transformers::models::gemma3::Model` and maps safetensors via `VarBuilder::from_mmaped_safetensors` on CPU.
-  - **Deterministic Feline Fallback:** If `models/gemma-3-270m` is absent, [`generate_fallback()`](file:///home/kiddos/projects/tools/sparky/src/brain/candle_engine.rs#L164-L265) provides rule-based prompt matching (treats, scolding, playing, sleep, curious) with realistic 40ms token streaming.
+- [`gguf_engine.rs`](file:///home/kiddos/projects/tools/sparky/src/brain/gguf_engine.rs):
+  - Spawns a dedicated thread (`sparky-brain`) receiving [`BrainRequest`](file:///home/kiddos/projects/tools/sparky/src/brain/gguf_engine.rs) and sending [`BrainResponse`](file:///home/kiddos/projects/tools/sparky/src/brain/gguf_engine.rs) via crossbeam channels.
+  - **Lazy Model Loading:** Defers loading GGUF weights into memory until the first chat prompt is sent.
+  - **Gemma 3 Architecture:** Uses `llama-cpp-2` with `sampler` features and memory-mapped models (`with_use_mmap(true)`).
+  - **Deterministic Feline Fallback:** If the GGUF model is absent, provides rule-based prompt matching (treats, scolding, playing, sleep, curious) with realistic 40ms token streaming.
 - [`prompt.rs`](file:///home/kiddos/projects/tools/sparky/src/brain/prompt.rs):
   - Dynamically builds Gemma chat formatting (`<start_of_turn>system...`) from [`EmotionRegistry::active_emotions()`](file:///home/kiddos/projects/tools/sparky/src/state/emotion.rs#L118-L120).
   - Extracts and strips `<action>([a-z0-9_-]+)</action>` tags from model output to trigger state transitions without displaying raw tags in dialogue.
@@ -265,18 +263,18 @@ sequenceDiagram
     participant UI as GLFW / Egui Main Loop
     participant Channel as Crossbeam Channels
     participant Brain as sparky-brain Worker
-    participant Candle as Candle Gemma Engine / Fallback
+    participant GGUF as llama.cpp GGUF Engine / Fallback
     participant SM as StateMachine
 
     UI->>Channel: BrainRequest::Chat { prompt: "Good job Sparky!" }
     Channel->>Brain: Pop Chat request
-    Brain->>Candle: Tokenize & run forward pass
+    Brain->>GGUF: Tokenize & run forward pass
     loop Streaming Generation
-        Candle->>Brain: Emit token chunk ("*purrs*")
+        GGUF->>Brain: Emit token chunk ("*purrs*")
         Brain->>Channel: BrainResponse::Token("*purrs*")
         Channel->>UI: Append token to chat bubble
     end
-    Candle->>Brain: Output EOS & "<action>happy</action>"
+    GGUF->>Brain: Output EOS & "<action>happy</action>"
     Brain->>Channel: BrainResponse::Complete { action_tag: "happy" }
     Channel->>UI: Stop thinking animation
     UI->>SM: transition_to("happy")
@@ -341,12 +339,6 @@ To enable local GGUF inference with minimal RAM (~241 MB):
 1. **In-App via System Tray:** Click **"Download GGUF Model"** in the tray menu. Sparky downloads and verifies the model natively in the background with real-time percentage progress in the tray.
 2. **CLI / Script Fallback:** You can also run `./scripts/download_gemma3_gguf.sh` if downloading manually outside Sparky.
 
-#### 3. Download Gemma 3 270M Safetensors (Candle Full-Precision)
-To enable real local LLM inference instead of the built-in fallback:
-```bash
-./scripts/download_gemma3_270m.sh models/gemma-3-270m
-```
-Downloads `config.json`, `tokenizer.json`, and `model.safetensors` from Hugging Face (`google/gemma-3-270m-it`).
 
 ---
 
@@ -478,8 +470,8 @@ When executing CLI commands or editing files, adhere to:
 
 1. **Native Wayland Floating Transparent Window Support:**
    - GLFW relies on X11 / XWayland protocols. Modern Wayland compositors (Sway, Hyprland, GNOME Wayland) require custom subsurfaces or `wlr-layer-shell` protocols for floating transparent overlays.
-2. **Quantized Candle LLM (INT4 / Q4_K):**
-   - Upgrade Gemma 3 270M from FP32 to `candle-quantized` Q4_K to reduce weight memory footprint from $\approx 540\text{ MB}$ to $< 150\text{ MB}$.
+2. **Quantized GGUF LLM In-Memory Optimization:**
+   - Continue tuning context window and thread count for Gemma 3 270M Q4_K_M GGUF to minimize RAM footprint during continuous generation.
 3. **Procedural Audio Effects:**
    - Integrate lightweight sound synthesis (`rodio`) for purring, soft meows, and hisses synchronized with emotion transitions.
 4. **Interactive Pet Physics:**
