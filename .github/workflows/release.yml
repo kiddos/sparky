@@ -44,8 +44,16 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Detect CMake version
+        id: cmake-version
+        run: |
+          CMAKE_VERSION=$(cmake --version | head -n1 | awk '{print $3}')
+          echo "version=$CMAKE_VERSION" >> "$GITHUB_OUTPUT"
+
       - name: Cache Cargo dependencies
         uses: swatinem/rust-cache@v2
+        with:
+          key: cmake-${{ steps.cmake-version.outputs.version }}
 
       - name: Transcode animations to WebP
         run: |
@@ -95,8 +103,17 @@ jobs:
       - name: Set up Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Detect CMake version
+        id: cmake-version
+        shell: pwsh
+        run: |
+          $cmakeVersion = ((cmake --version | Select-Object -First 1).Trim() -split '\s+')[2]
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "version=$cmakeVersion"
+
       - name: Cache Cargo dependencies
         uses: swatinem/rust-cache@v2
+        with:
+          key: cmake-${{ steps.cmake-version.outputs.version }}
 
       - name: Set up FFmpeg
         shell: pwsh
