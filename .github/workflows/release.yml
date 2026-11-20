@@ -53,7 +53,7 @@ jobs:
       - name: Cache Cargo dependencies
         uses: swatinem/rust-cache@v2
         with:
-          key: cmake-${{ steps.cmake-version.outputs.version }}
+          prefix-key: v1-rust-cmake-${{ steps.cmake-version.outputs.version }}
 
       - name: Transcode animations to WebP
         run: |
@@ -113,7 +113,7 @@ jobs:
       - name: Cache Cargo dependencies
         uses: swatinem/rust-cache@v2
         with:
-          key: cmake-${{ steps.cmake-version.outputs.version }}
+          prefix-key: v1-rust-cmake-${{ steps.cmake-version.outputs.version }}
 
       - name: Set up FFmpeg
         shell: pwsh
